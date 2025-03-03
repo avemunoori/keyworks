@@ -99,9 +99,13 @@ public class MidiDeviceService {
         openDevices.put(deviceName, selectedDevice);
         
         logger.info("Now listening for MIDI input from: {}", deviceName);
-        return String.format("Connected to %s - %s", 
-            selectedInfo.getName(), 
-            selectedInfo.getDescription());
+        
+        // Safely format the return string using the device name if selectedInfo is null
+        return String.format("Connected to %s", 
+            selectedInfo != null ? 
+                selectedInfo.getName() + " - " + selectedInfo.getDescription() : 
+                deviceName
+        );
     }
     
     /**
