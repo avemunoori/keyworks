@@ -1,3 +1,4 @@
+// Updated MidiDeviceService.java with methods needed by MidiController
 package com.example.keyworks.service;
 
 import org.slf4j.Logger;
@@ -23,9 +24,109 @@ public class MidiDeviceService {
     // Store recorded notes for conversion to LilyPond
     private final List<MidiNote> recordedNotes = new ArrayList<>();
     
+    // Map to store recordings by ID
+    private final Map<String, Map<String, Object>> recordings = new HashMap<>();
+    
     // Recording state
     private boolean isRecording = false;
     private long recordingStartTime = 0;
+    private String currentRecordingId = null;
+    
+    /**
+     * Get all available MIDI input devices
+     * @return List of available input devices
+     */
+    public List<MidiDeviceWrapper> getAvailableInputDevices() {
+        List<MidiDeviceWrapper> deviceList = new ArrayList<>();
+        MidiDevice.Info[] infos = MidiSystem.getMidiDeviceInfo();
+        
+        for (MidiDevice.Info info : infos) {
+            try {
+                MidiDevice device = MidiSystem.getMidiDevice(info);
+                // Only include devices that can transmit (input devices)
+                if (device.getMaxTransmitters() != 0) {
+                    deviceList.add(new MidiDeviceWrapper(device));
+                }
+            } catch (MidiUnavailableException e) {
+                logger.error("Error accessing MIDI device: {}", info.getName(), e);
+            }
+        }
+        
+        return deviceList;
+    }
+    
+    /**
+     * Start recording from a MIDI device
+     * @param deviceName Name of the device to record from
+     * @return Recording ID
+     * @throws MidiUnavailableException If the device cannot be accessed
+     */
+    public String startRecording(String deviceName) throws MidiUnavailableException {
+        // Stop any ongoing recording
+        if (isRecording) {
+            stopRecording();
+        }
+        
+        // Start listening to the device
+        startListening(deviceName);
+        
+        // Clear previous recording data
+        recordedNotes.clear();
+        activeNotes.clear();
+        activeNoteVelocities.clear();
+        
+        // Generate a unique recording ID
+        currentRecordingId = UUID.randomUUID().toString();
+        
+        // Start recording
+        isRecording = true;
+        recordingStartTime = System.currentTimeMillis();
+        logger.info("Started recording MIDI input with ID: {}", currentRecordingId);
+        
+        return currentRecordingId;
+    }
+    
+    /**
+     * Stop recording MIDI input
+     * @return Recording data including LilyPond code
+     */
+    public Map<String, Object> stopRecording() {
+        if (!isRecording) {
+            throw new IllegalStateException("No active recording to stop");
+        }
+        
+        isRecording = false;
+        logger.info("Stopped recording. Captured {} notes", recordedNotes.size());
+        
+        // Convert recorded notes to LilyPond notation
+        String lilyPondCode = convertToLilyPond();
+        
+        // Create recording data
+        Map<String, Object> recordingData = new HashMap<>();
+        recordingData.put("id", currentRecordingId);
+        recordingData.put("noteCount", recordedNotes.size());
+        recordingData.put("duration", System.currentTimeMillis() - recordingStartTime);
+        recordingData.put("lilyPondCode", lilyPondCode);
+        recordingData.put("notes", new ArrayList<>(recordedNotes)); // Clone the list
+        
+        // Store the recording
+        recordings.put(currentRecordingId, recordingData);
+        
+        // Reset current recording ID
+        String completedRecordingId = currentRecordingId;
+        currentRecordingId = null;
+        
+        return recordings.get(completedRecordingId);
+    }
+    
+    /**
+     * Get recording data by ID
+     * @param id Recording ID
+     * @return Recording data
+     */
+    public Map<String, Object> getRecordingData(String id) {
+        return recordings.get(id);
+    }
     
     /**
      * Lists all available MIDI devices
@@ -140,30 +241,6 @@ public class MidiDeviceService {
             logger.info("Stopped listening to MIDI device: {}", entry.getKey());
         }
         openDevices.clear();
-    }
-    
-    /**
-     * Start recording MIDI input
-     */
-    public void startRecording() {
-        recordedNotes.clear();
-        activeNotes.clear();
-        activeNoteVelocities.clear();
-        isRecording = true;
-        recordingStartTime = System.currentTimeMillis();
-        logger.info("Started recording MIDI input");
-    }
-    
-    /**
-     * Stop recording MIDI input
-     * @return LilyPond code generated from the recorded MIDI
-     */
-    public String stopRecording() {
-        isRecording = false;
-        logger.info("Stopped recording. Captured {} notes", recordedNotes.size());
-        
-        // Convert recorded notes to LilyPond notation
-        return convertToLilyPond();
     }
     
     /**
@@ -305,7 +382,7 @@ public class MidiDeviceService {
     /**
      * Class to represent a MIDI note with timing information
      */
-    private static class MidiNote {
+    public static class MidiNote {
         private final int key;
         private final int velocity;
         private final long startTime;
@@ -322,7 +399,6 @@ public class MidiDeviceService {
             return key;
         }
         
-        @SuppressWarnings("unused")
         public int getVelocity() {
             return velocity;
         }
@@ -333,6 +409,25 @@ public class MidiDeviceService {
         
         public long getDuration() {
             return duration;
+        }
+    }
+    
+    /**
+     * Wrapper class for MidiDevice to provide access to device info
+     */
+    public static class MidiDeviceWrapper {
+        private final MidiDevice device;
+        
+        public MidiDeviceWrapper(MidiDevice device) {
+            this.device = device;
+        }
+        
+        public MidiDevice.Info getDeviceInfo() {
+            return device.getDeviceInfo();
+        }
+        
+        public MidiDevice getDevice() {
+            return device;
         }
     }
 }

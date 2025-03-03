@@ -1,83 +1,84 @@
 package com.example.keyworks.controller;
 
 import com.example.keyworks.service.MidiDeviceService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import javax.sound.midi.MidiUnavailableException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/midi")
 public class MidiController {
 
     private final MidiDeviceService midiDeviceService;
-    
+
+
     public MidiController(MidiDeviceService midiDeviceService) {
         this.midiDeviceService = midiDeviceService;
     }
-    
-    /**
-     * Lists all available MIDI devices
-     * @return List of MIDI devices
-     */
+
     @GetMapping("/devices")
-    public ResponseEntity<List<String>> listMidiDevices() {
-        return ResponseEntity.ok(midiDeviceService.listMidiDevices());
+    public ResponseEntity<List<Map<String, String>>> getAvailableMidiDevices() {
+        List<Map<String, String>> devices = midiDeviceService.getAvailableInputDevices().stream()
+            .map(device -> {
+                Map<String, String> deviceInfo = new HashMap<>();
+                deviceInfo.put("id", device.getDeviceInfo().getName());
+                deviceInfo.put("name", device.getDeviceInfo().getName());
+                return deviceInfo;
+            })
+            .collect(Collectors.toList());
+        
+        return ResponseEntity.ok(devices);
     }
-    
-    /**
-     * Starts listening to a MIDI device
-     * @param deviceName Name of the device to listen to
-     * @return Status message
-     */
-    @PostMapping("/listen/{deviceName}")
-    public ResponseEntity<?> listenToDevice(@PathVariable String deviceName) {
+
+    @PostMapping("/record/start")
+    public ResponseEntity<Map<String, String>> startRecording(@RequestParam String deviceName) {
         try {
-            String result = midiDeviceService.startListening(deviceName);
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Now listening for MIDI input from " + deviceName,
-                "device", result
-            ));
-        } catch (MidiUnavailableException e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", false,
-                "error", "MIDI device unavailable: " + e.getMessage()
-            ));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", false,
-                "error", e.getMessage()
-            ));
+            String recordingId = midiDeviceService.startRecording(deviceName);
+            Map<String, String> response = new HashMap<>();
+            response.put("status", "recording");
+            response.put("recordingId", recordingId);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            // Replace Map.of with HashMap for compatibility with older Java versions
+            HashMap<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(errorResponse);
         }
     }
-    
-    /**
-     * Stops listening to a MIDI device
-     * @param deviceName Name of the device to stop listening to
-     * @return Status message
-     */
-    @PostMapping("/stop/{deviceName}")
-    public ResponseEntity<?> stopListeningToDevice(@PathVariable String deviceName) {
-        midiDeviceService.stopListening(deviceName);
-        return ResponseEntity.ok(Map.of(
-            "success", true,
-            "message", "Stopped listening to " + deviceName
-        ));
+
+    @PostMapping("/record/stop")
+    public ResponseEntity<Map<String, Object>> stopRecording() {
+        try {
+            Map<String, Object> recordingData = midiDeviceService.stopRecording();
+            return ResponseEntity.ok(recordingData);
+        } catch (Exception e) {
+            // Replace Map.of with HashMap for compatibility with older Java versions
+            HashMap<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(errorResponse);
+        }
     }
-    
-    /**
-     * Stops listening to all MIDI devices
-     * @return Status message
-     */
-    @PostMapping("/stop-all")
-    public ResponseEntity<?> stopAllDevices() {
-        midiDeviceService.stopAll();
-        return ResponseEntity.ok(Map.of(
-            "success", true,
-            "message", "Stopped listening to all MIDI devices"
-        ));
+
+    @GetMapping("/recording/{id}")
+    public ResponseEntity<Map<String, Object>> getRecording(@PathVariable String id) {
+        try {
+            Map<String, Object> recordingData = midiDeviceService.getRecordingData(id);
+            if (recordingData == null) {
+                return ResponseEntity.notFound().build();
+            }
+            return ResponseEntity.ok(recordingData);
+        } catch (Exception e) {
+            // Replace Map.of with HashMap for compatibility with older Java versions
+            HashMap<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(errorResponse);
+        }
     }
 }
