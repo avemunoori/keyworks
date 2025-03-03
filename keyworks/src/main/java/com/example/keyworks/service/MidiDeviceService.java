@@ -5,9 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import javax.sound.midi.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -15,6 +13,19 @@ public class MidiDeviceService {
     
     private static final Logger logger = LoggerFactory.getLogger(MidiDeviceService.class);
     private final Map<String, MidiDevice> openDevices = new ConcurrentHashMap<>();
+    
+    // Store active notes and their start times for duration calculation
+    private final Map<Integer, Long> activeNotes = new HashMap<>();
+    
+    // Store velocities of active notes
+    private final Map<Integer, Integer> activeNoteVelocities = new HashMap<>();
+    
+    // Store recorded notes for conversion to LilyPond
+    private final List<MidiNote> recordedNotes = new ArrayList<>();
+    
+    // Recording state
+    private boolean isRecording = false;
+    private long recordingStartTime = 0;
     
     /**
      * Lists all available MIDI devices
@@ -132,6 +143,94 @@ public class MidiDeviceService {
     }
     
     /**
+     * Start recording MIDI input
+     */
+    public void startRecording() {
+        recordedNotes.clear();
+        activeNotes.clear();
+        activeNoteVelocities.clear();
+        isRecording = true;
+        recordingStartTime = System.currentTimeMillis();
+        logger.info("Started recording MIDI input");
+    }
+    
+    /**
+     * Stop recording MIDI input
+     * @return LilyPond code generated from the recorded MIDI
+     */
+    public String stopRecording() {
+        isRecording = false;
+        logger.info("Stopped recording. Captured {} notes", recordedNotes.size());
+        
+        // Convert recorded notes to LilyPond notation
+        return convertToLilyPond();
+    }
+    
+    /**
+     * Convert recorded MIDI notes to LilyPond notation
+     * @return LilyPond code
+     */
+    private String convertToLilyPond() {
+        if (recordedNotes.isEmpty()) {
+            return "% No notes recorded\n\\version \"2.24.0\"\n{ c'4 }";
+        }
+        
+        StringBuilder lilyPond = new StringBuilder();
+        lilyPond.append("\\version \"2.24.0\"\n{\n  ");
+        
+        // Sort notes by start time
+        recordedNotes.sort(Comparator.comparing(MidiNote::getStartTime));
+        
+        // Simple conversion - this can be enhanced for better rhythm detection
+        for (MidiNote note : recordedNotes) {
+            lilyPond.append(midiNoteToLilyPond(note)).append(" ");
+        }
+        
+        lilyPond.append("\n}");
+        return lilyPond.toString();
+    }
+    
+    /**
+     * Convert a MIDI note to LilyPond notation
+     * @param note The MIDI note to convert
+     * @return LilyPond notation for the note
+     */
+    private String midiNoteToLilyPond(MidiNote note) {
+        // MIDI note 60 is middle C (c')
+        String[] noteNames = {"c", "cis", "d", "dis", "e", "f", "fis", "g", "gis", "a", "ais", "b"};
+        int octave = note.getKey() / 12 - 1;
+        int noteIndex = note.getKey() % 12;
+        
+        String noteName = noteNames[noteIndex];
+        
+        // Add octave markers
+        if (octave < 3) {
+            noteName += ",".repeat(3 - octave);
+        } else if (octave > 3) {
+            noteName += "'".repeat(octave - 3);
+        }
+        
+        // Determine note duration (simplified)
+        String duration = determineDuration(note.getDuration());
+        
+        return noteName + duration;
+    }
+    
+    /**
+     * Determine the LilyPond duration based on the note duration in milliseconds
+     * @param durationMs Duration in milliseconds
+     * @return LilyPond duration string
+     */
+    private String determineDuration(long durationMs) {
+        // Simple duration mapping - can be enhanced for better rhythm detection
+        if (durationMs < 200) return "16";      // Sixteenth note
+        else if (durationMs < 400) return "8";  // Eighth note
+        else if (durationMs < 800) return "4";  // Quarter note
+        else if (durationMs < 1600) return "2"; // Half note
+        else return "1";                        // Whole note
+    }
+    
+    /**
      * Receiver for MIDI messages
      */
     private class MidiInputReceiver implements Receiver {
@@ -153,18 +252,15 @@ public class MidiDeviceService {
                     // Note: Some devices send NOTE_ON with velocity 0 instead of NOTE_OFF
                     if (velocity > 0) {
                         logger.info("Device: {} - Note On: {} velocity: {}", deviceName, key, velocity);
-                        // TODO: Process note on event
-                        processNoteOn(key, velocity, timeStamp);
+                        processNoteOn(key, velocity, System.currentTimeMillis());
                     } else {
                         logger.info("Device: {} - Note Off: {} (via velocity 0)", deviceName, key);
-                        // TODO: Process note off event
-                        processNoteOff(key, timeStamp);
+                        processNoteOff(key, System.currentTimeMillis());
                     }
                 } else if (sm.getCommand() == ShortMessage.NOTE_OFF) {
                     int key = sm.getData1();
                     logger.info("Device: {} - Note Off: {}", deviceName, key);
-                    // TODO: Process note off event
-                    processNoteOff(key, timeStamp);
+                    processNoteOff(key, System.currentTimeMillis());
                 }
             }
         }
@@ -182,8 +278,10 @@ public class MidiDeviceService {
      * @param timeStamp Timestamp of the event
      */
     private void processNoteOn(int key, int velocity, long timeStamp) {
-        // This is where you'll implement note processing logic
-        // For now, we're just logging the event
+        if (isRecording) {
+            activeNotes.put(key, timeStamp);
+            activeNoteVelocities.put(key, velocity); // Store the velocity
+        }
     }
     
     /**
@@ -192,7 +290,49 @@ public class MidiDeviceService {
      * @param timeStamp Timestamp of the event
      */
     private void processNoteOff(int key, long timeStamp) {
-        // This is where you'll implement note processing logic
-        // For now, we're just logging the event
+        if (isRecording && activeNotes.containsKey(key)) {
+            long startTime = activeNotes.remove(key);
+            int velocity = activeNoteVelocities.remove(key); // Get the stored velocity
+            long duration = timeStamp - startTime;
+            
+            MidiNote note = new MidiNote(key, velocity, startTime - recordingStartTime, duration);
+            recordedNotes.add(note);
+            
+            logger.info("Recorded note: {} (duration: {} ms)", key, duration);
+        }
+    }
+    
+    /**
+     * Class to represent a MIDI note with timing information
+     */
+    private static class MidiNote {
+        private final int key;
+        private final int velocity;
+        private final long startTime;
+        private final long duration;
+        
+        public MidiNote(int key, int velocity, long startTime, long duration) {
+            this.key = key;
+            this.velocity = velocity;
+            this.startTime = startTime;
+            this.duration = duration;
+        }
+        
+        public int getKey() {
+            return key;
+        }
+        
+        @SuppressWarnings("unused")
+        public int getVelocity() {
+            return velocity;
+        }
+        
+        public long getStartTime() {
+            return startTime;
+        }
+        
+        public long getDuration() {
+            return duration;
+        }
     }
 }
