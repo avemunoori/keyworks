@@ -1,0 +1,12 @@
+{"properties": [
+  {
+    "name": "lilypond.output.dir",
+    "type": "java.lang.String",
+    "description": "A description for 'lilypond.output.dir'"
+  },
+  {
+    "name": "lilypond.executable",
+    "type": "java.lang.String",
+    "description": "A description for 'lilypond.executable'"
+  }
+]}
