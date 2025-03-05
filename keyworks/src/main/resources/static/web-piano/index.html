@@ -125,6 +125,7 @@
             <button id="startRecordingBtn" disabled>Start Recording</button>
             <button id="stopRecordingBtn" disabled>Stop Recording</button>
             <button id="debugBtn">Debug Devices</button>
+            <button id="testMidiBtn">Test MIDI Processing</button>
         </div>
         
         <div class="piano" id="piano"></div>
@@ -145,6 +146,7 @@
         const startRecordingBtn = document.getElementById('startRecordingBtn');
         const stopRecordingBtn = document.getElementById('stopRecordingBtn');
         const debugBtn = document.getElementById('debugBtn');
+        const testMidiBtn = document.getElementById('testMidiBtn');
         const pianoEl = document.getElementById('piano');
         const logEl = document.getElementById('log');
         
@@ -271,19 +273,58 @@
             }
         }
         
-        // Send MIDI Note On message
+        // Send MIDI Note On message on multiple channels
         function sendNoteOn(note, velocity = 100) {
             if (midiOutput) {
-                midiOutput.send([0x90, note, velocity]); // Note On, note, velocity
-                log(`Sent Note On: ${note} (velocity: ${velocity})`);
+                // Try channel 0 (default)
+                midiOutput.send([0x90, note, velocity]);
+                log(`Sent Note On: ${note} (velocity: ${velocity}) on channel 0`);
+                
+                // Also try channel 1
+                midiOutput.send([0x91, note, velocity]);
+                log(`Sent Note On: ${note} (velocity: ${velocity}) on channel 1`);
             }
+            
+            // Also send via HTTP as a fallback
+            sendMidiEventViaHttp(true, note, velocity);
         }
         
-        // Send MIDI Note Off message
+        // Send MIDI Note Off message on multiple channels
         function sendNoteOff(note) {
             if (midiOutput) {
-                midiOutput.send([0x80, note, 0]); // Note Off, note, velocity
-                log(`Sent Note Off: ${note}`);
+                // Try channel 0 (default)
+                midiOutput.send([0x80, note, 0]);
+                log(`Sent Note Off: ${note} on channel 0`);
+                
+                // Also try channel 1
+                midiOutput.send([0x81, note, 0]);
+                log(`Sent Note Off: ${note} on channel 1`);
+            }
+            
+            // Also send via HTTP as a fallback
+            sendMidiEventViaHttp(false, note);
+        }
+        
+        // Send MIDI event via HTTP
+        async function sendMidiEventViaHttp(isNoteOn, note, velocity = 100) {
+            try {
+                const eventType = isNoteOn ? 'note-on' : 'note-off';
+                const response = await fetch(`${apiBaseUrl}/direct-midi-event`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        type: eventType,
+                        note: note,
+                        velocity: isNoteOn ? velocity : 0,
+                        timestamp: Date.now()
+                    })
+                });
+                const data = await response.json();
+                log(`Sent MIDI event via HTTP: ${eventType} note: ${note} - Response: ${JSON.stringify(data)}`);
+            } catch (error) {
+                log(`Error sending MIDI event via HTTP: ${error.message}`);
             }
         }
         
@@ -321,43 +362,55 @@
             }
         }
         
-       
-    async function startRecording() {
-        if (!midiOutput) return;
-    
-        try {
-        // First connect directly to the device
-            await connectDirectly();
-        
-        // Then try the virtual approach with the exact device name
-             const deviceName = midiOutput.name;
-            log(`Connecting to device via virtual approach: ${deviceName}`);
-            const connectResponse = await fetch(`${apiBaseUrl}/listen-virtual?deviceName=${encodeURIComponent(deviceName)}`, {
-                method: 'POST'
-            });
-            const connectData = await connectResponse.json();
-            log(`API Virtual Connect Response: ${JSON.stringify(connectData)}`);
-        
-        // Then start recording with the exact device name
-            log(`Starting recording on device: ${deviceName}`);
-            const response = await fetch(`${apiBaseUrl}/record/start?deviceName=${encodeURIComponent(deviceName)}`, {
-                method: 'POST'
-             });
-        const data = await response.json();
-        
-        if (data.recordingId) {
-            isRecording = true;
-            startRecordingBtn.disabled = true;
-            stopRecordingBtn.disabled = false;
-            log(`Recording started with ID: ${data.recordingId}`);
-        } else {
-            log(`Error starting recording: ${JSON.stringify(data)}`);
+        // Function to test MIDI processing
+        async function testMidiProcessing() {
+            try {
+                const response = await fetch(`${apiBaseUrl}/test-midi-reception`);
+                const data = await response.json();
+                log(`MIDI processing test result: ${JSON.stringify(data)}`);
+                return data;
+            } catch (error) {
+                log(`Error testing MIDI processing: ${error.message}`);
+                return null;
+            }
         }
-    } catch (error) {
-        log(`API Error: ${error.message}`);
-    }
-}
         
+        // Start recording via API
+        async function startRecording() {
+            if (!midiOutput) return;
+            
+            try {
+                // First connect directly to the device
+                await connectDirectly();
+                
+                // Then try the virtual approach with the exact device name
+                const deviceName = midiOutput.name;
+                log(`Connecting to device via virtual approach: ${deviceName}`);
+                const connectResponse = await fetch(`${apiBaseUrl}/listen-virtual?deviceName=${encodeURIComponent(deviceName)}`, {
+                    method: 'POST'
+                });
+                const connectData = await connectResponse.json();
+                log(`API Virtual Connect Response: ${JSON.stringify(connectData)}`);
+                
+                // Then start recording with the exact device name
+                log(`Starting recording on device: ${deviceName}`);
+                const response = await fetch(`${apiBaseUrl}/record/start?deviceName=${encodeURIComponent(deviceName)}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.recordingId) {
+                    isRecording = true;
+                    startRecordingBtn.disabled = true;
+                    stopRecordingBtn.disabled = false;
+                    log(`Recording started with ID: ${data.recordingId}`);
+                } else {
+                    log(`Error starting recording: ${JSON.stringify(data)}`);
+                }
+            } catch (error) {
+                log(`API Error: ${error.message}`);
+            }
+        }
         
         // Stop recording via API
         async function stopRecording() {
@@ -414,6 +467,7 @@
             startRecordingBtn.addEventListener('click', startRecording);
             stopRecordingBtn.addEventListener('click', stopRecording);
             debugBtn.addEventListener('click', debugDevices);
+            testMidiBtn.addEventListener('click', testMidiProcessing);
             
             // Add mouse/touch events to piano keys
             const keys = document.querySelectorAll('.key');

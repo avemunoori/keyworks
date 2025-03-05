@@ -698,18 +698,30 @@ public class MidiDeviceService {
         
         @Override
         public void send(MidiMessage message, long timeStamp) {
-            // Add detailed logging for all incoming MIDI messages
-            logger.info("Received MIDI message from {}: length={}, timestamp={}", 
-                deviceName, message.getMessage().length, timeStamp);
+            // Log ALL incoming messages in hex format for debugging
+            byte[] data = message.getMessage();
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : data) {
+                hexString.append(String.format("%02X ", b));
+            }
+            logger.info("RAW MIDI: {} - bytes: {} hex: {}", deviceName, data.length, hexString.toString());
             
+            // Process ShortMessage (Note On/Off)
             if (message instanceof ShortMessage) {
                 ShortMessage sm = (ShortMessage) message;
-                logger.info("MIDI Command: {}, Channel: {}, Data1: {}, Data2: {}", 
-                    sm.getCommand(), sm.getChannel(), sm.getData1(), sm.getData2());
+                int command = sm.getCommand();
+                int channel = sm.getChannel();
+                int data1 = sm.getData1();
+                int data2 = sm.getData2();
                 
-                if (sm.getCommand() == ShortMessage.NOTE_ON) {
-                    int key = sm.getData1();
-                    int velocity = sm.getData2();
+                logger.info("MIDI Command: {} (0x{}) Channel: {} Data1: {} Data2: {}", 
+                    commandToString(command), String.format("%02X", command), 
+                    channel, data1, data2);
+                
+                // Process Note On (including all channels)
+                if (command == ShortMessage.NOTE_ON) {
+                    int key = data1;
+                    int velocity = data2;
                     
                     // Note: Some devices send NOTE_ON with velocity 0 instead of NOTE_OFF
                     if (velocity > 0) {
@@ -721,11 +733,35 @@ public class MidiDeviceService {
                             deviceName, key);
                         processNoteOff(key, System.currentTimeMillis());
                     }
-                } else if (sm.getCommand() == ShortMessage.NOTE_OFF) {
-                    int key = sm.getData1();
+                } 
+                // Process Note Off
+                else if (command == ShortMessage.NOTE_OFF) {
+                    int key = data1;
                     logger.info("Processing Note Off - Device: {} - Note: {}", deviceName, key);
                     processNoteOff(key, System.currentTimeMillis());
                 }
+                // Log other MIDI commands for debugging
+                else {
+                    logger.info("Other MIDI command received: {}", commandToString(command));
+                }
+            }
+            // Log other message types
+            else {
+                logger.info("Non-ShortMessage received: {}", message.getClass().getSimpleName());
+            }
+        }
+        
+        // Helper method to convert MIDI command to string
+        private String commandToString(int command) {
+            switch (command) {
+                case ShortMessage.NOTE_ON: return "NOTE_ON";
+                case ShortMessage.NOTE_OFF: return "NOTE_OFF";
+                case ShortMessage.CONTROL_CHANGE: return "CONTROL_CHANGE";
+                case ShortMessage.PROGRAM_CHANGE: return "PROGRAM_CHANGE";
+                case ShortMessage.PITCH_BEND: return "PITCH_BEND";
+                case ShortMessage.CHANNEL_PRESSURE: return "CHANNEL_PRESSURE";
+                case ShortMessage.POLY_PRESSURE: return "POLY_PRESSURE";
+                default: return "UNKNOWN(" + command + ")";
             }
         }
         

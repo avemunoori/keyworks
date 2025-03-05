@@ -326,4 +326,44 @@ public class MidiController {
         
         return ResponseEntity.ok(response);
     }
+    
+    /**
+     * Direct endpoint for receiving MIDI events via HTTP
+     * @param eventData MIDI event data
+     * @return Status of the operation
+     */
+    @PostMapping("/direct-midi-event")
+    public ResponseEntity<Map<String, Object>> receiveMidiEvent(@RequestBody Map<String, Object> eventData) {
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            String type = (String) eventData.get("type");
+            int note = ((Number) eventData.get("note")).intValue();
+            int velocity = ((Number) eventData.get("velocity")).intValue();
+            long timestamp = ((Number) eventData.get("timestamp")).longValue();
+            
+            logger.info("Received direct MIDI event via HTTP: {} note: {} velocity: {}", 
+                type, note, velocity);
+            
+            if ("note-on".equals(type)) {
+                midiDeviceService.processNoteOn(note, velocity, timestamp);
+                response.put("status", "success");
+                response.put("message", "Processed Note On event");
+            } else if ("note-off".equals(type)) {
+                midiDeviceService.processNoteOff(note, timestamp);
+                response.put("status", "success");
+                response.put("message", "Processed Note Off event");
+            } else {
+                response.put("status", "error");
+                response.put("message", "Unknown event type: " + type);
+            }
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Error processing direct MIDI event", e);
+            response.put("status", "error");
+            response.put("message", "Error processing MIDI event: " + e.getMessage());
+            return ResponseEntity.status(500).body(response);
+        }
+    }
 }
