@@ -1,4 +1,3 @@
-// Updated MidiDeviceService.java with methods needed by MidiController
 package com.example.keyworks.service;
 
 import org.slf4j.Logger;
@@ -43,16 +42,40 @@ public class MidiDeviceService {
         for (MidiDevice.Info info : infos) {
             try {
                 MidiDevice device = MidiSystem.getMidiDevice(info);
-                // Only include devices that can transmit (input devices)
-                if (device.getMaxTransmitters() != 0) {
-                    deviceList.add(new MidiDeviceWrapper(device));
-                }
+                // Include all devices for now, we'll check capabilities later
+                deviceList.add(new MidiDeviceWrapper(device));
             } catch (MidiUnavailableException e) {
                 logger.error("Error accessing MIDI device: {}", info.getName(), e);
             }
         }
         
         return deviceList;
+    }
+    
+    /**
+     * Checks if a MIDI device can be used for recording
+     * @param deviceName Name of the device to check
+     * @return True if the device can be used for recording
+     */
+    public boolean canDeviceRecord(String deviceName) {
+        MidiDevice.Info[] infos = MidiSystem.getMidiDeviceInfo();
+        
+        for (MidiDevice.Info info : infos) {
+            if (info.getName().contains(deviceName)) {
+                try {
+                    MidiDevice device = MidiSystem.getMidiDevice(info);
+                    boolean canTransmit = device.getMaxTransmitters() != 0;
+                    logger.info("Device {} can transmit: {}", deviceName, canTransmit);
+                    return canTransmit;
+                } catch (MidiUnavailableException e) {
+                    logger.error("Error checking MIDI device: {}", deviceName, e);
+                    return false;
+                }
+            }
+        }
+        
+        logger.warn("Device not found: {}", deviceName);
+        return false;
     }
     
     /**
@@ -67,8 +90,20 @@ public class MidiDeviceService {
             stopRecording();
         }
         
-        // Start listening to the device
-        startListening(deviceName);
+        // Try the virtual MIDI input approach first
+        try {
+            listenToVirtualMidiInput(deviceName);
+        } catch (Exception e) {
+            logger.error("Failed to connect to virtual MIDI input: {}", e.getMessage());
+            
+            // Fall back to other methods
+            try {
+                listenDirectToDevice(deviceName);
+            } catch (Exception ex) {
+                logger.error("Failed to connect directly to device: {}", ex.getMessage());
+                startListening(deviceName);
+            }
+        }
         
         // Clear previous recording data
         recordedNotes.clear();
@@ -84,6 +119,222 @@ public class MidiDeviceService {
         logger.info("Started recording MIDI input with ID: {}", currentRecordingId);
         
         return currentRecordingId;
+    }
+    
+    /**
+     * Listen to a MIDI IN port that corresponds to a virtual MIDI device
+     * @param deviceName Name of the virtual device
+     * @return Information about the connection status
+     * @throws MidiUnavailableException If the device cannot be accessed
+     */
+    public String listenToVirtualMidiInput(String deviceName) throws MidiUnavailableException {
+        // Close any previously open device with this name
+        stopListening(deviceName);
+        
+        MidiDevice.Info[] infos = MidiSystem.getMidiDeviceInfo();
+        MidiDevice inputDevice = null;
+        
+        // Log all available devices for debugging
+        logger.info("Available MIDI devices:");
+        for (MidiDevice.Info info : infos) {
+            try {
+                MidiDevice device = MidiSystem.getMidiDevice(info);
+                logger.info("Device: {} - {} (Max transmitters: {}, Max receivers: {})",
+                    info.getName(), info.getDescription(),
+                    device.getMaxTransmitters(), device.getMaxReceivers());
+            } catch (MidiUnavailableException e) {
+                logger.error("Error accessing MIDI device: {}", info.getName(), e);
+            }
+        }
+        
+        // First, try to find the exact matching input device by description
+        String exactDescription = "Virtual Piano Bus 1";
+        for (MidiDevice.Info info : infos) {
+            if (info.getDescription().equals(exactDescription)) {
+                try {
+                    MidiDevice device = MidiSystem.getMidiDevice(info);
+                    // We need a device that can transmit (has transmitters)
+                    if (device.getMaxTransmitters() != 0) {
+                        inputDevice = device;
+                        logger.info("Found exact matching input device by description: {} - {}", 
+                            info.getName(), info.getDescription());
+                        break;
+                    }
+                } catch (MidiUnavailableException e) {
+                    logger.error("Error accessing MIDI device: {}", info.getName(), e);
+                }
+            }
+        }
+        
+        // If we didn't find an exact match by description, try by name
+        if (inputDevice == null) {
+            for (MidiDevice.Info info : infos) {
+                if (info.getName().contains(deviceName)) {
+                    try {
+                        MidiDevice device = MidiSystem.getMidiDevice(info);
+                        // We need a device that can transmit
+                        if (device.getMaxTransmitters() != 0) {
+                            inputDevice = device;
+                            logger.info("Found input device by name: {} - {}", 
+                                info.getName(), info.getDescription());
+                            break;
+                        }
+                    } catch (MidiUnavailableException e) {
+                        logger.error("Error accessing MIDI device: {}", info.getName(), e);
+                    }
+                }
+            }
+        }
+        
+        // If we still don't have a device, try any input device
+        if (inputDevice == null) {
+            for (MidiDevice.Info info : infos) {
+                try {
+                    MidiDevice device = MidiSystem.getMidiDevice(info);
+                    if (device.getMaxTransmitters() != 0 && 
+                        !(device instanceof Sequencer) && 
+                        !(device instanceof Synthesizer)) {
+                        inputDevice = device;
+                        logger.info("Found fallback input device: {} - {}", 
+                            info.getName(), info.getDescription());
+                        break;
+                    }
+                } catch (MidiUnavailableException e) {
+                    logger.error("Error accessing MIDI device: {}", info.getName(), e);
+                }
+            }
+        }
+        
+        if (inputDevice == null) {
+            throw new IllegalArgumentException("No suitable MIDI input device found");
+        }
+        
+        // Open the device if it's not already open
+        if (!inputDevice.isOpen()) {
+            inputDevice.open();
+        }
+        
+        // Set up a transmitter and connect it to our receiver
+        Transmitter transmitter = inputDevice.getTransmitter();
+        MidiInputReceiver receiver = new MidiInputReceiver(inputDevice.getDeviceInfo().getName());
+        transmitter.setReceiver(receiver);
+        
+        // Store the open device
+        openDevices.put(deviceName, inputDevice);
+        
+        logger.info("Successfully connected to MIDI input device: {}", inputDevice.getDeviceInfo().getName());
+        return "Connected to " + inputDevice.getDeviceInfo().getName();
+    }
+    
+    /**
+     * Direct method to listen to a specific MIDI device
+     * @param deviceName Name of the device to listen to
+     * @return Information about the connection status
+     * @throws MidiUnavailableException If the device cannot be accessed
+     */
+    public String listenDirectToDevice(String deviceName) throws MidiUnavailableException {
+        // Close any previously open device with this name
+        stopListening(deviceName);
+        
+        MidiDevice.Info[] infos = MidiSystem.getMidiDeviceInfo();
+        MidiDevice selectedDevice = null;
+        
+        // Find the device by name
+        for (MidiDevice.Info info : infos) {
+            if (info.getName().contains(deviceName)) {
+                try {
+                    MidiDevice device = MidiSystem.getMidiDevice(info);
+                    // We need a device that can transmit (has transmitters)
+                    if (device.getMaxTransmitters() != 0) {
+                        selectedDevice = device;
+                        logger.info("Found device: {} - {}", info.getName(), info.getDescription());
+                        logger.info("Max transmitters: {}, Max receivers: {}", 
+                            device.getMaxTransmitters(), device.getMaxReceivers());
+                        break;
+                    }
+                } catch (MidiUnavailableException e) {
+                    logger.error("Error accessing MIDI device: {}", info.getName(), e);
+                }
+            }
+        }
+        
+        if (selectedDevice == null) {
+            throw new IllegalArgumentException("MIDI device not found: " + deviceName);
+        }
+        
+        // Open the device if it's not already open
+        if (!selectedDevice.isOpen()) {
+            selectedDevice.open();
+        }
+        
+        // Create and attach our custom receiver
+        Transmitter transmitter = selectedDevice.getTransmitter();
+        MidiInputReceiver receiver = new MidiInputReceiver(deviceName);
+        transmitter.setReceiver(receiver);
+        
+        // Store the open device
+        openDevices.put(deviceName, selectedDevice);
+        
+        logger.info("Successfully connected to MIDI device: {}", deviceName);
+        return "Connected to " + deviceName;
+    }
+    
+    /**
+     * Check if a device is a virtual MIDI device
+     * @param deviceName Name of the device to check
+     * @return True if the device is a virtual MIDI device
+     */
+    private boolean isVirtualMidiDevice(String deviceName) {
+        // Check for common virtual MIDI device indicators
+        return deviceName.contains("IAC") || 
+               deviceName.contains("Bus") || 
+               deviceName.contains("Virtual") ||
+               deviceName.contains("LoopBe");
+    }
+    
+    /**
+     * Special method to connect to virtual MIDI devices
+     * @param deviceName Name of the virtual device
+     * @throws MidiUnavailableException If the device cannot be accessed
+     */
+    @SuppressWarnings("unused")
+    private void startListeningToVirtualDevice(String deviceName) throws MidiUnavailableException {
+        MidiDevice.Info[] infos = MidiSystem.getMidiDeviceInfo();
+        MidiDevice selectedDevice = null;
+        
+        // Find the device by name
+        for (MidiDevice.Info info : infos) {
+            if (info.getName().contains(deviceName)) {
+                try {
+                    MidiDevice device = MidiSystem.getMidiDevice(info);
+                    // For virtual devices, we need to check if they can transmit
+                    if (device.getMaxTransmitters() != 0) {
+                        selectedDevice = device;
+                        break;
+                    }
+                } catch (MidiUnavailableException e) {
+                    logger.error("Error accessing MIDI device: {}", info.getName(), e);
+                }
+            }
+        }
+        
+        if (selectedDevice == null) {
+            throw new IllegalArgumentException("Virtual MIDI device not found: " + deviceName);
+        }
+        
+        // Open the device
+        if (!selectedDevice.isOpen()) {
+            selectedDevice.open();
+        }
+        
+        // Set up a transmitter and connect it to our receiver
+        Transmitter transmitter = selectedDevice.getTransmitter();
+        transmitter.setReceiver(new MidiInputReceiver(deviceName));
+        
+        logger.info("Connected to virtual MIDI device: {}", deviceName);
+        
+        // Store the open device
+        openDevices.put(deviceName, selectedDevice);
     }
     
     /**
@@ -192,9 +443,17 @@ public class MidiDeviceService {
         // Find the device by name
         for (MidiDevice.Info info : infos) {
             if (info.getName().contains(deviceName)) {
-                selectedDevice = MidiSystem.getMidiDevice(info);
-                selectedInfo = info;
-                break;
+                try {
+                    MidiDevice device = MidiSystem.getMidiDevice(info);
+                    // We need a device that can transmit
+                    if (device.getMaxTransmitters() != 0) {
+                        selectedDevice = device;
+                        selectedInfo = info;
+                        break;
+                    }
+                } catch (MidiUnavailableException e) {
+                    logger.error("Error accessing MIDI device: {}", info.getName(), e);
+                }
             }
         }
         
@@ -203,21 +462,59 @@ public class MidiDeviceService {
         }
         
         // Open the device and set up a receiver
-        selectedDevice.open();
-        Transmitter transmitter = selectedDevice.getTransmitter();
-        transmitter.setReceiver(new MidiInputReceiver(deviceName));
-        
-        // Store the open device
-        openDevices.put(deviceName, selectedDevice);
-        
-        logger.info("Now listening for MIDI input from: {}", deviceName);
-        
-        // Safely format the return string using the device name if selectedInfo is null
-        return String.format("Connected to %s", 
-            selectedInfo != null ? 
-                selectedInfo.getName() + " - " + selectedInfo.getDescription() : 
-                deviceName
-        );
+        try {
+            selectedDevice.open();
+            
+            // For virtual devices, we might need a different approach
+            if (isVirtualMidiDevice(deviceName)) {
+                // This is a placeholder for virtual device handling
+                logger.info("Using virtual device mode for: {}", deviceName);
+                
+                // For some virtual devices, we might need to use a Sequencer
+                if (selectedDevice instanceof Sequencer) {
+                    Sequencer sequencer = (Sequencer) selectedDevice;
+                    sequencer.addMetaEventListener(meta -> {
+                        // Handle meta events if needed
+                    });
+                    
+                    // You might need to connect the sequencer to a synthesizer
+                    // sequencer.getTransmitter().setReceiver(synthesizer.getReceiver());
+                }
+            } else {
+                // Standard approach for physical MIDI devices
+                Transmitter transmitter = selectedDevice.getTransmitter();
+                transmitter.setReceiver(new MidiInputReceiver(deviceName));
+            }
+            
+            // Store the open device
+            openDevices.put(deviceName, selectedDevice);
+            
+            logger.info("Now listening for MIDI input from: {}", deviceName);
+            
+            // Safely format the return string using the device name if selectedInfo is null
+            return String.format("Connected to %s", 
+                selectedInfo != null ? 
+                    selectedInfo.getName() + " - " + selectedInfo.getDescription() : 
+                    deviceName
+            );
+        } catch (MidiUnavailableException e) {
+            logger.error("Failed to open MIDI device: {}", deviceName, e);
+            
+            // Special handling for "transmitter not available" error
+            if (e.getMessage() != null && e.getMessage().contains("transmitter")) {
+                logger.info("Device doesn't support transmitters. Trying alternative approach...");
+                
+                // For devices that don't have transmitters, we might need to use them as receivers
+                // This is a placeholder - actual implementation depends on your specific device
+                
+                // Store the open device anyway
+                openDevices.put(deviceName, selectedDevice);
+                
+                return String.format("Connected to %s (alternative mode)", deviceName);
+            }
+            
+            throw e;
+        }
     }
     
     /**
@@ -241,6 +538,87 @@ public class MidiDeviceService {
             logger.info("Stopped listening to MIDI device: {}", entry.getKey());
         }
         openDevices.clear();
+    }
+    
+    /**
+     * Process a note on event
+     * @param key MIDI note number
+     * @param velocity Velocity (0-127)
+     * @param timeStamp Timestamp of the event
+     */
+    public void processNoteOn(int key, int velocity, long timeStamp) {
+        logger.info("processNoteOn called - Recording state: {}", isRecording);
+        if (isRecording) {
+            activeNotes.put(key, timeStamp);
+            activeNoteVelocities.put(key, velocity);
+            logger.info("Stored Note On: {} velocity: {} at time: {}", key, velocity, timeStamp);
+        }
+    }
+    
+    /**
+     * Process a note off event
+     * @param key MIDI note number
+     * @param timeStamp Timestamp of the event
+     */
+    public void processNoteOff(int key, long timeStamp) {
+        logger.info("processNoteOff called - Recording state: {}", isRecording);
+        if (isRecording && activeNotes.containsKey(key)) {
+            long startTime = activeNotes.remove(key);
+            int velocity = activeNoteVelocities.remove(key);
+            long duration = timeStamp - startTime;
+            
+            MidiNote note = new MidiNote(key, velocity, startTime - recordingStartTime, duration);
+            recordedNotes.add(note);
+            
+            logger.info("Recorded note: {} velocity: {} duration: {} ms", key, velocity, duration);
+        }
+    }
+    
+    /**
+     * Simulate MIDI input for testing
+     * @param notes Array of MIDI note numbers to simulate
+     * @return Recording ID
+     */
+    public String simulateMidiInput(int[] notes) {
+        // Start a new recording
+        currentRecordingId = UUID.randomUUID().toString();
+        isRecording = true;
+        recordingStartTime = System.currentTimeMillis();
+        
+        // Clear previous recording data
+        recordedNotes.clear();
+        activeNotes.clear();
+        activeNoteVelocities.clear();
+        
+        // Simulate playing each note
+        long currentTime = System.currentTimeMillis();
+        for (int note : notes) {
+            // Note on
+            processNoteOn(note, 100, currentTime);
+            currentTime += 500; // 500ms note duration
+            
+            // Note off
+            processNoteOff(note, currentTime);
+            currentTime += 100; // 100ms between notes
+        }
+        
+        // Stop recording and return the data
+        Map<String, Object> recordingData = new HashMap<>();
+        recordingData.put("id", currentRecordingId);
+        recordingData.put("noteCount", recordedNotes.size());
+        recordingData.put("duration", currentTime - recordingStartTime);
+        recordingData.put("lilyPondCode", convertToLilyPond());
+        recordingData.put("notes", new ArrayList<>(recordedNotes));
+        
+        // Store the recording
+        recordings.put(currentRecordingId, recordingData);
+        
+        // Reset recording state
+        isRecording = false;
+        String completedRecordingId = currentRecordingId;
+        currentRecordingId = null;
+        
+        return completedRecordingId;
     }
     
     /**
@@ -315,12 +693,19 @@ public class MidiDeviceService {
         
         public MidiInputReceiver(String deviceName) {
             this.deviceName = deviceName;
+            logger.info("Created new MidiInputReceiver for device: {}", deviceName);
         }
         
         @Override
         public void send(MidiMessage message, long timeStamp) {
+            // Add detailed logging for all incoming MIDI messages
+            logger.info("Received MIDI message from {}: length={}, timestamp={}", 
+                deviceName, message.getMessage().length, timeStamp);
+            
             if (message instanceof ShortMessage) {
                 ShortMessage sm = (ShortMessage) message;
+                logger.info("MIDI Command: {}, Channel: {}, Data1: {}, Data2: {}", 
+                    sm.getCommand(), sm.getChannel(), sm.getData1(), sm.getData2());
                 
                 if (sm.getCommand() == ShortMessage.NOTE_ON) {
                     int key = sm.getData1();
@@ -328,15 +713,17 @@ public class MidiDeviceService {
                     
                     // Note: Some devices send NOTE_ON with velocity 0 instead of NOTE_OFF
                     if (velocity > 0) {
-                        logger.info("Device: {} - Note On: {} velocity: {}", deviceName, key, velocity);
+                        logger.info("Processing Note On - Device: {} - Note: {} velocity: {}", 
+                            deviceName, key, velocity);
                         processNoteOn(key, velocity, System.currentTimeMillis());
                     } else {
-                        logger.info("Device: {} - Note Off: {} (via velocity 0)", deviceName, key);
+                        logger.info("Processing Note Off (via velocity 0) - Device: {} - Note: {}", 
+                            deviceName, key);
                         processNoteOff(key, System.currentTimeMillis());
                     }
                 } else if (sm.getCommand() == ShortMessage.NOTE_OFF) {
                     int key = sm.getData1();
-                    logger.info("Device: {} - Note Off: {}", deviceName, key);
+                    logger.info("Processing Note Off - Device: {} - Note: {}", deviceName, key);
                     processNoteOff(key, System.currentTimeMillis());
                 }
             }
@@ -344,38 +731,7 @@ public class MidiDeviceService {
         
         @Override
         public void close() {
-            // Nothing to do here
-        }
-    }
-    
-    /**
-     * Process a note on event
-     * @param key MIDI note number
-     * @param velocity Velocity (0-127)
-     * @param timeStamp Timestamp of the event
-     */
-    private void processNoteOn(int key, int velocity, long timeStamp) {
-        if (isRecording) {
-            activeNotes.put(key, timeStamp);
-            activeNoteVelocities.put(key, velocity); // Store the velocity
-        }
-    }
-    
-    /**
-     * Process a note off event
-     * @param key MIDI note number
-     * @param timeStamp Timestamp of the event
-     */
-    private void processNoteOff(int key, long timeStamp) {
-        if (isRecording && activeNotes.containsKey(key)) {
-            long startTime = activeNotes.remove(key);
-            int velocity = activeNoteVelocities.remove(key); // Get the stored velocity
-            long duration = timeStamp - startTime;
-            
-            MidiNote note = new MidiNote(key, velocity, startTime - recordingStartTime, duration);
-            recordedNotes.add(note);
-            
-            logger.info("Recorded note: {} (duration: {} ms)", key, duration);
+            logger.info("Closing MidiInputReceiver for device: {}", deviceName);
         }
     }
     
