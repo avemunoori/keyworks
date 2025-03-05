@@ -126,6 +126,7 @@
             <button id="stopRecordingBtn" disabled>Stop Recording</button>
             <button id="debugBtn">Debug Devices</button>
             <button id="testMidiBtn">Test MIDI Processing</button>
+            <button id="downloadPdfBtn" disabled>Download PDF</button>
         </div>
         
         <div class="piano" id="piano"></div>
@@ -147,6 +148,7 @@
         const stopRecordingBtn = document.getElementById('stopRecordingBtn');
         const debugBtn = document.getElementById('debugBtn');
         const testMidiBtn = document.getElementById('testMidiBtn');
+        const downloadPdfBtn = document.getElementById('downloadPdfBtn');
         const pianoEl = document.getElementById('piano');
         const logEl = document.getElementById('log');
         
@@ -155,6 +157,7 @@
         let midiOutput = null;
         let apiBaseUrl = 'http://localhost:8080/api/midi';
         let isRecording = false;
+        let currentRecordingId = null;
         
         // Piano Configuration
         const startNote = 60; // Middle C
@@ -426,11 +429,43 @@
                 startRecordingBtn.disabled = false;
                 stopRecordingBtn.disabled = true;
                 
+                // Store the recording ID and enable the download button
+                currentRecordingId = data.id;
+                downloadPdfBtn.disabled = false;
+                
                 log(`Recording stopped. Notes captured: ${data.noteCount}`);
                 log(`LilyPond code: ${data.lilyPondCode}`);
                 log(`Notes: ${JSON.stringify(data.notes)}`);
             } catch (error) {
                 log(`API Error: ${error.message}`);
+            }
+        }
+        
+        // Function to download PDF
+        async function downloadPdf() {
+            if (!currentRecordingId) {
+                log('No recording available to download');
+                return;
+            }
+            
+            try {
+                log(`Downloading PDF for recording: ${currentRecordingId}`);
+                
+                // Create a direct link to download the PDF
+                const downloadUrl = `${window.location.origin}/api/sheet-music/from-recording/${currentRecordingId}`;
+                
+                // Create a temporary link element and click it to trigger the download
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.target = '_blank';
+                link.download = `recording-${currentRecordingId}.pdf`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                log('PDF download initiated');
+            } catch (error) {
+                log(`Error downloading PDF: ${error.message}`);
             }
         }
         
@@ -468,6 +503,7 @@
             stopRecordingBtn.addEventListener('click', stopRecording);
             debugBtn.addEventListener('click', debugDevices);
             testMidiBtn.addEventListener('click', testMidiProcessing);
+            downloadPdfBtn.addEventListener('click', downloadPdf);
             
             // Add mouse/touch events to piano keys
             const keys = document.querySelectorAll('.key');

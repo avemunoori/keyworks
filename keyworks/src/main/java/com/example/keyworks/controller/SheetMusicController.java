@@ -4,10 +4,17 @@ import com.example.keyworks.model.SheetMusic;
 import com.example.keyworks.service.SheetMusicService;
 import com.example.keyworks.service.UserService;
 import com.example.keyworks.service.LilyPondService;
+import com.example.keyworks.service.MidiDeviceService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -20,6 +27,9 @@ public class SheetMusicController {
     private final SheetMusicService sheetMusicService;
     private final UserService userService;
     private final LilyPondService lilyPondService;
+    
+    @Autowired
+    private ApplicationContext applicationContext;
 
     public SheetMusicController(SheetMusicService sheetMusicService, UserService userService, LilyPondService lilyPondService) {
         this.sheetMusicService = sheetMusicService;
@@ -141,8 +151,6 @@ public class SheetMusicController {
         }
     }
     
-   
-    
     @PostMapping("/test-lilypond")
     public ResponseEntity<?> testLilyPond() {
         try {
@@ -169,6 +177,68 @@ public class SheetMusicController {
         } catch (IOException | InterruptedException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Failed to generate files: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * Convert a MIDI recording to PDF
+     * @param recordingId ID of the recording to convert
+     * @return PDF file as a downloadable resource
+     */
+    @GetMapping("/from-recording/{recordingId}")
+    public ResponseEntity<?> generatePdfFromRecording(@PathVariable String recordingId,
+                                                     @RequestParam(required = false) Long userId) {
+        try {
+            // Get the recording data from MidiDeviceService
+            MidiDeviceService midiDeviceService = applicationContext.getBean(MidiDeviceService.class);
+            Map<String, Object> recordingData = midiDeviceService.getRecordingData(recordingId);
+            
+            if (recordingData == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "Recording not found with ID: " + recordingId));
+            }
+            
+            String lilyPondCode = (String) recordingData.get("lilyPondCode");
+            
+            if (lilyPondCode == null || lilyPondCode.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "No LilyPond code found for recording: " + recordingId));
+            }
+            
+            // Create a SheetMusic object
+            SheetMusic sheetMusic = new SheetMusic();
+            sheetMusic.setTitle("Recording " + recordingId);
+            sheetMusic.setDescription("Generated from MIDI recording");
+            sheetMusic.setLilyPondCode(lilyPondCode);
+            sheetMusic.setCreatedAt(LocalDateTime.now());
+            sheetMusic.setUpdatedAt(LocalDateTime.now());
+            
+            // Set user if provided
+            if (userId != null) {
+                userService.findUserById(userId).ifPresent(sheetMusic::setUser);
+            }
+            
+            // Generate files using LilyPondService
+            SheetMusic result = lilyPondService.generateFiles(sheetMusic);
+            
+            // Return the PDF file as a downloadable resource
+            File pdfFile = new File(result.getPdfPath());
+            if (!pdfFile.exists()) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(Map.of("error", "PDF file was not generated"));
+            }
+            
+            FileSystemResource resource = new FileSystemResource(pdfFile);
+            
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, 
+                            "attachment; filename=\"recording-" + recordingId + ".pdf\"")
+                    .contentType(MediaType.APPLICATION_PDF)
+                    .body(resource);
+                    
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to generate PDF: " + e.getMessage()));
         }
     }
 }
