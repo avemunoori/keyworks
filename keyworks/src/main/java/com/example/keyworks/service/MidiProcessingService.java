@@ -3,6 +3,7 @@ package com.example.keyworks.service;
 import com.example.keyworks.model.Note;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -21,13 +22,12 @@ public class MidiProcessingService {
 
     private static final Logger logger = LoggerFactory.getLogger(MidiProcessingService.class);
     private final Queue<Note> noteQueue = new ConcurrentLinkedQueue<>();
-    @SuppressWarnings("unused")
     private final MidiDeviceService midiDeviceService;
     private Path outputDir;
     private boolean isRecording = false;
     private long recordingStartTime;
 
-    
+    @Autowired
     public MidiProcessingService(MidiDeviceService midiDeviceService, 
                                 @Value("${app.output.directory:./output}") String outputDirectory) {
         this.midiDeviceService = midiDeviceService;
@@ -85,15 +85,28 @@ public class MidiProcessingService {
         logger.info("Note queue cleared");
     }
 
+    // Original method for backward compatibility
     public String generateLilyPondFile() {
+        return generateLilyPondFile(null);
+    }
+
+    // New method with custom filename support
+    public String generateLilyPondFile(String customFilename) {
         if (noteQueue.isEmpty()) {
             logger.warn("No notes to process");
             return null;
         }
 
-        // Create a timestamp for the filename
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-        String filename = "keyworks_" + timestamp + ".ly";
+        // Use custom filename if provided, otherwise use timestamp
+        String filename;
+        if (customFilename != null && !customFilename.isEmpty()) {
+            filename = customFilename + ".ly";
+        } else {
+            // Create a timestamp for the filename
+            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+            filename = "keyworks_" + timestamp + ".ly";
+        }
+        
         Path filePath = outputDir.resolve(filename);
 
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
@@ -319,12 +332,23 @@ public class MidiProcessingService {
         }
     }
 
+    // Original method for backward compatibility
     public String generateSheetMusic() {
-        String baseFilename = generateLilyPondFile();
+        return generateSheetMusic(null);
+    }
+
+    // New method with custom filename support
+    public String generateSheetMusic(String customFilename) {
+        String baseFilename = generateLilyPondFile(customFilename);
         if (baseFilename != null) {
             exportMidiFile(baseFilename);
             return baseFilename;
         }
         return null;
+    }
+    
+    // Method to get the path to a PDF file
+    public Path getPdfPath(String baseFilename) {
+        return outputDir.resolve(baseFilename + ".pdf");
     }
 }

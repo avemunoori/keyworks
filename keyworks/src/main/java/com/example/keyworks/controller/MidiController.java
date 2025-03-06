@@ -82,8 +82,8 @@ public class MidiController {
             midiProcessingService.processNoteOff(midiNote, noteTimestamp + duration);
         }
         
-        // Generate LilyPond file and compile to PDF
-        String baseFilename = midiProcessingService.generateLilyPondFile();
+        // Generate LilyPond file and compile to PDF using the recording ID
+        String baseFilename = midiProcessingService.generateSheetMusic(recordingId);
         boolean success = (baseFilename != null);
         
         Map<String, String> response = new HashMap<>();
@@ -227,13 +227,14 @@ public class MidiController {
             
             // Add recording data to response
             if (recordingData != null) {
-                response.put("recordingId", recordingData.get("id"));
+                String recordingId = (String) recordingData.get("id");
+                response.put("recordingId", recordingId);
                 response.put("noteCount", recordingData.get("noteCount"));
                 response.put("duration", recordingData.get("duration"));
                 response.put("lilyPondCode", recordingData.get("lilyPondCode"));
                 
-                // Generate sheet music from the recorded notes
-                String baseFilename = midiProcessingService.generateSheetMusic();
+                // Generate sheet music using the recording ID as the filename
+                String baseFilename = midiProcessingService.generateSheetMusic(recordingId);
                 
                 if (baseFilename != null) {
                     response.put("pdfUrl", "/output/" + baseFilename + ".pdf");
@@ -326,41 +327,50 @@ public class MidiController {
     }
     
     /**
- * Convert note name to MIDI note number
- * @param noteName Note name (e.g., "C4")
- * @return MIDI note number
- */
+     * Convert note name to MIDI note number
+     * @param noteName Note name (e.g., "C4")
+     * @return MIDI note number
+     */
     private int convertNoteNameToMidi(String noteName) {
         if (noteName == null || noteName.length() < 2) {
             return 60; // Default to middle C
-     }
-    
-     // Define the mapping of note names to their values using Map.ofEntries
-        Map<String, Integer> noteMap = Map.ofEntries(
-        Map.entry("C", 0), Map.entry("C#", 1), Map.entry("Db", 1),
-        Map.entry("D", 2), Map.entry("D#", 3), Map.entry("Eb", 3),
-        Map.entry("E", 4),
-        Map.entry("F", 5), Map.entry("F#", 6), Map.entry("Gb", 6),
-        Map.entry("G", 7), Map.entry("G#", 8), Map.entry("Ab", 8),
-        Map.entry("A", 9), Map.entry("A#", 10), Map.entry("Bb", 10),
-        Map.entry("B", 11)
-    );
-    
-    // Extract note and octave
+        }
+        
+        // Define the mapping of note names to their values using HashMap
+        Map<String, Integer> noteMap = new HashMap<>();
+        noteMap.put("C", 0);
+        noteMap.put("C#", 1);
+        noteMap.put("Db", 1);
+        noteMap.put("D", 2);
+        noteMap.put("D#", 3);
+        noteMap.put("Eb", 3);
+        noteMap.put("E", 4);
+        noteMap.put("F", 5);
+        noteMap.put("F#", 6);
+        noteMap.put("Gb", 6);
+        noteMap.put("G", 7);
+        noteMap.put("G#", 8);
+        noteMap.put("Ab", 8);
+        noteMap.put("A", 9);
+        noteMap.put("A#", 10);
+        noteMap.put("Bb", 10);
+        noteMap.put("B", 11);
+        
+        // Extract note and octave
         String note = noteName.substring(0, noteName.length() - 1);
         int octave;
-         try {
-          octave = Integer.parseInt(noteName.substring(noteName.length() - 1));
-         } catch (NumberFormatException e) {
-        octave = 4; // Default to middle octave
+        try {
+            octave = Integer.parseInt(noteName.substring(noteName.length() - 1));
+        } catch (NumberFormatException e) {
+            octave = 4; // Default to middle octave
         }
-    
+        
         // Calculate MIDI note number
         Integer noteValue = noteMap.get(note);
         if (noteValue == null) {
-        return 60; // Default to middle C
+            return 60; // Default to middle C
         }
-    
+        
         return (octave + 1) * 12 + noteValue;
     }
 }

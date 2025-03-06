@@ -37,8 +37,8 @@ public class TestController {
         long timestamp = System.currentTimeMillis();
         addTestNotes(timestamp);
         
-        // Generate LilyPond file and compile to PDF
-        String baseFilename = midiProcessingService.generateLilyPondFile();
+        // Generate LilyPond file and compile to PDF using the provided ID
+        String baseFilename = midiProcessingService.generateSheetMusic(id);
         
         if (baseFilename != null) {
             Path outputDir = Paths.get(midiProcessingService.getOutputDirectory());
