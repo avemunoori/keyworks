@@ -2,6 +2,7 @@ package com.example.keyworks.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.userdetails.User;
@@ -22,9 +23,9 @@ public class SecurityConfig {
             .authorizeHttpRequests(authorize -> authorize
                 // Public pages
                 .requestMatchers("/", "/piano", "/web-piano/**", "/js/**", "/css/**", "/login").permitAll()
-                // Public API endpoints
-                .requestMatchers("/api/midi/devices", "/api/midi/status").permitAll()
-                // Protected endpoints
+                // Public API endpoints - only allow GET for devices and status
+                .requestMatchers(HttpMethod.GET, "/api/midi/devices", "/api/midi/status").permitAll()
+                // All other endpoints require authentication
                 .anyRequest().authenticated()
             )
             .formLogin(form -> form

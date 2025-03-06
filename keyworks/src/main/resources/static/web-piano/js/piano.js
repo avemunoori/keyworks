@@ -1,495 +1,489 @@
-// API base URL
-const apiBaseUrl = '/api/midi';
+/**
+ * KeyWorks Piano JavaScript
+ * Handles MIDI device connection, recording, and virtual piano keyboard
+ */
 
-// DOM Elements
 document.addEventListener('DOMContentLoaded', function() {
-    // Device and user controls
-    const deviceSelectEl = document.getElementById('deviceSelect');
-    const userSelectEl = document.getElementById('userSelect');
-    const refreshBtn = document.getElementById('refreshBtn');
-    const refreshUsersBtn = document.getElementById('refreshUsersBtn');
-    const connectBtn = document.getElementById('connectBtn');
-    const disconnectBtn = document.getElementById('disconnectBtn');
-    const startRecordingBtn = document.getElementById('startRecordingBtn');
-    const stopRecordingBtn = document.getElementById('stopRecordingBtn');
-    const downloadPdfBtn = document.getElementById('downloadPdfBtn');
-    const simulateBtn = document.getElementById('simulateBtn');
+    // DOM Elements
+    const pianoContainer = document.getElementById('piano-container');
+    const deviceSelect = document.getElementById('device-select');
+    const connectButton = document.getElementById('connect-button');
+    const recordButton = document.getElementById('record-button');
+    const stopButton = document.getElementById('stop-button');
+    const statusElement = document.getElementById('status');
+    const recordingsList = document.getElementById('recordings-list');
     
-    // Display elements
-    const logContainerEl = document.getElementById('logContainer');
-    const statusDisplayEl = document.getElementById('statusDisplay');
-    const recordingInfoEl = document.getElementById('recordingInfo');
-    const lilypondCodeEl = document.getElementById('lilypondCode');
-    const noteDisplayEl = document.getElementById('noteDisplay');
-    const virtualKeyboardEl = document.getElementById('virtualKeyboard');
-    const tabs = document.querySelectorAll('.tab');
-    const tabContents = document.querySelectorAll('.tab-content');
-    
-    // State
+    // State variables
     let isConnected = false;
     let isRecording = false;
-    let currentRecordingId = null;
-    let recordingData = null;
+    let selectedDeviceId = null;
+    let recordingStartTime = null;
+    let recordingTimer = null;
+    let recordingDuration = 0;
+    const recordingTimerElement = document.getElementById('recording-timer');
     
-    // Initialize the application
-    function init() {
-        loadDevices();
-        loadUsers();
-        createVirtualKeyboard();
-        setupTabNavigation();
-        updateUIState();
-        setupEventListeners();
+    // Create piano keyboard
+    createPianoKeyboard();
+    
+    // Load MIDI devices on page load
+    loadMidiDevices();
+    
+    // Check MIDI status on page load
+    checkMidiStatus();
+    
+    // Load user recordings if authenticated
+    if (document.getElementById('user-authenticated')) {
+        loadUserRecordings();
     }
     
-    // Set up tab navigation
-    function setupTabNavigation() {
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                const tabId = tab.getAttribute('data-tab');
+    // Event listeners
+    deviceSelect.addEventListener('change', function() {
+        selectedDeviceId = this.value;
+        connectButton.disabled = !selectedDeviceId;
+    });
+    
+    connectButton.addEventListener('click', function() {
+        if (isConnected) {
+            disconnectMidiDevice();
+        } else {
+            connectMidiDevice();
+        }
+    });
+    
+    recordButton.addEventListener('click', function() {
+        startRecording();
+    });
+    
+    stopButton.addEventListener('click', function() {
+        stopRecording();
+    });
+    
+    /**
+     * Authentication handling
+     */
+    function handleAuthError(response) {
+        if (response.redirected && response.url.includes('/login')) {
+            // User was redirected to login page
+            window.location.href = response.url;
+            return null;
+        }
+        return response;
+    }
+    
+    /**
+     * MIDI Device Functions
+     */
+    function loadMidiDevices() {
+        fetch('/api/midi/devices')
+            .then(response => response.json())
+            .then(devices => {
+                deviceSelect.innerHTML = '<option value="">Select a MIDI device...</option>';
                 
-                // Update active tab
-                tabs.forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
+                devices.forEach(device => {
+                    const option = document.createElement('option');
+                    option.value = device.id;
+                    option.textContent = device.name;
+                    deviceSelect.appendChild(option);
+                });
                 
-                // Update active content
-                tabContents.forEach(content => content.classList.remove('active'));
-                document.getElementById(tabId + 'Tab').classList.add('active');
+                // Enable/disable connect button based on selection
+                connectButton.disabled = !deviceSelect.value;
+            })
+            .catch(error => {
+                console.error('Error loading MIDI devices:', error);
+                updateStatus('Error loading MIDI devices', 'error');
             });
+    }
+    
+    function checkMidiStatus() {
+        fetch('/api/midi/status')
+            .then(response => response.json())
+            .then(status => {
+                isConnected = status.connected;
+                isRecording = status.recording;
+                
+                if (isConnected) {
+                    // Find and select the connected device in the dropdown
+                    const options = Array.from(deviceSelect.options);
+                    const connectedOption = options.find(option => option.textContent.includes(status.currentDevice));
+                    if (connectedOption) {
+                        deviceSelect.value = connectedOption.value;
+                        selectedDeviceId = connectedOption.value;
+                    }
+                    
+                    updateConnectButton(true);
+                    updateStatus('Connected to ' + status.currentDevice, 'success');
+                    recordButton.disabled = false;
+                } else {
+                    updateConnectButton(false);
+                    updateStatus('Not connected', 'info');
+                    recordButton.disabled = true;
+                }
+                
+                if (isRecording) {
+                    updateRecordingUI(true);
+                } else {
+                    updateRecordingUI(false);
+                }
+            })
+            .catch(error => {
+                console.error('Error checking MIDI status:', error);
+                updateStatus('Error checking MIDI status', 'error');
+            });
+    }
+    
+    function connectMidiDevice() {
+        if (!selectedDeviceId) {
+            updateStatus('Please select a MIDI device', 'warning');
+            return;
+        }
+        
+        fetch('/api/midi/connect', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ deviceId: selectedDeviceId })
+        })
+        .then(handleAuthError)
+        .then(response => {
+            if (response) {
+                return response.json();
+            }
+            return null;
+        })
+        .then(data => {
+            if (data) {
+                isConnected = true;
+                updateConnectButton(true);
+                updateStatus('Connected to ' + data.deviceName, 'success');
+                recordButton.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error connecting to MIDI device:', error);
+            updateStatus('Error connecting to MIDI device', 'error');
         });
     }
     
-    // Set up event listeners
-    function setupEventListeners() {
-        if (refreshBtn) refreshBtn.addEventListener('click', loadDevices);
-        if (refreshUsersBtn) refreshUsersBtn.addEventListener('click', loadUsers);
-        if (connectBtn) connectBtn.addEventListener('click', connectToDevice);
-        if (disconnectBtn) disconnectBtn.addEventListener('click', disconnectFromDevice);
-        if (startRecordingBtn) startRecordingBtn.addEventListener('click', startRecording);
-        if (stopRecordingBtn) stopRecordingBtn.addEventListener('click', stopRecording);
-        if (downloadPdfBtn) downloadPdfBtn.addEventListener('click', downloadPdf);
-        if (simulateBtn) simulateBtn.addEventListener('click', simulateMidiInput);
-        
-        if (userSelectEl) {
-            userSelectEl.addEventListener('change', (e) => {
-                if (e.target.value) {
-                    setCurrentUser(e.target.value);
+    function disconnectMidiDevice() {
+        fetch('/api/midi/disconnect', {
+            method: 'POST'
+        })
+        .then(handleAuthError)
+        .then(response => {
+            if (response) {
+                return response.json();
+            }
+            return null;
+        })
+        .then(data => {
+            if (data) {
+                isConnected = false;
+                updateConnectButton(false);
+                updateStatus('Disconnected', 'info');
+                recordButton.disabled = true;
+                
+                if (isRecording) {
+                    stopRecording();
                 }
-            });
+            }
+        })
+        .catch(error => {
+            console.error('Error disconnecting MIDI device:', error);
+            updateStatus('Error disconnecting MIDI device', 'error');
+        });
+    }
+    
+    /**
+     * Recording Functions
+     */
+    function startRecording() {
+        if (!isConnected) {
+            updateStatus('Please connect to a MIDI device first', 'warning');
+            return;
+        }
+        
+        fetch('/api/midi/record/start', {
+            method: 'POST'
+        })
+        .then(handleAuthError)
+        .then(response => {
+            if (response) {
+                return response.json();
+            }
+            return null;
+        })
+        .then(data => {
+            if (data) {
+                isRecording = true;
+                recordingStartTime = new Date();
+                updateRecordingUI(true);
+                updateStatus('Recording started', 'success');
+                
+                // Start recording timer
+                recordingTimer = setInterval(updateRecordingTimer, 1000);
+            }
+        })
+        .catch(error => {
+            console.error('Error starting recording:', error);
+            updateStatus('Error starting recording', 'error');
+        });
+    }
+    
+    function stopRecording() {
+        if (!isRecording) {
+            return;
+        }
+        
+        fetch('/api/midi/record/stop', {
+            method: 'POST'
+        })
+        .then(handleAuthError)
+        .then(response => {
+            if (response) {
+                return response.json();
+            }
+            return null;
+        })
+        .then(data => {
+            if (data) {
+                isRecording = false;
+                updateRecordingUI(false);
+                updateStatus('Recording stopped', 'success');
+                
+                // Stop recording timer
+                clearInterval(recordingTimer);
+                recordingDuration = 0;
+                recordingTimerElement.textContent = '00:00';
+                
+                // Reload recordings list if authenticated
+                if (document.getElementById('user-authenticated')) {
+                    loadUserRecordings();
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error stopping recording:', error);
+            updateStatus('Error stopping recording', 'error');
+        });
+    }
+    
+    function updateRecordingTimer() {
+        if (!recordingStartTime) return;
+        
+        const now = new Date();
+        recordingDuration = Math.floor((now - recordingStartTime) / 1000);
+        
+        const minutes = Math.floor(recordingDuration / 60).toString().padStart(2, '0');
+        const seconds = (recordingDuration % 60).toString().padStart(2, '0');
+        
+        recordingTimerElement.textContent = `${minutes}:${seconds}`;
+    }
+    
+    /**
+     * UI Update Functions
+     */
+    function updateConnectButton(connected) {
+        if (connected) {
+            connectButton.textContent = 'Disconnect';
+            connectButton.classList.remove('btn-primary');
+            connectButton.classList.add('btn-danger');
+            deviceSelect.disabled = true;
+        } else {
+            connectButton.textContent = 'Connect';
+            connectButton.classList.remove('btn-danger');
+            connectButton.classList.add('btn-primary');
+            deviceSelect.disabled = false;
         }
     }
     
-    // Create virtual keyboard
-    function createVirtualKeyboard() {
-        if (!virtualKeyboardEl) return;
-        
+    function updateRecordingUI(recording) {
+        if (recording) {
+            recordButton.disabled = true;
+            stopButton.disabled = false;
+            recordingTimerElement.parentElement.classList.remove('d-none');
+        } else {
+            recordButton.disabled = !isConnected;
+            stopButton.disabled = true;
+            recordingTimerElement.parentElement.classList.add('d-none');
+        }
+    }
+    
+    function updateStatus(message, type) {
+        statusElement.textContent = message;
+        statusElement.className = '';
+        statusElement.classList.add('status', `status-${type}`);
+    }
+    
+    /**
+     * Piano Keyboard Functions
+     */
+    function createPianoKeyboard() {
         const octaves = 2;
-        const startNote = 60; // Middle C
+        const startOctave = 4; // Middle C (C4)
+        const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
         
-        for (let octave = 0; octave < octaves; octave++) {
-            for (let note = 0; note < 12; note++) {
-                const midiNote = startNote + octave * 12 + note;
-                const keyEl = document.createElement('div');
+        // Clear existing piano keys
+        pianoContainer.innerHTML = '';
+        
+        // Create piano keyboard
+        for (let octave = startOctave; octave < startOctave + octaves; octave++) {
+            const octaveContainer = document.createElement('div');
+            octaveContainer.className = 'octave';
+            
+            for (let i = 0; i < notes.length; i++) {
+                const note = notes[i];
+                const isBlack = note.includes('#');
                 
-                // Determine if it's a white or black key
-                const isBlackKey = [1, 3, 6, 8, 10].includes(note);
+                const key = document.createElement('div');
+                key.className = isBlack ? 'key black' : 'key white';
+                key.dataset.note = note + octave;
                 
-                keyEl.style.width = isBlackKey ? '30px' : '40px';
-                keyEl.style.height = isBlackKey ? '100px' : '150px';
-                keyEl.style.backgroundColor = isBlackKey ? '#333' : 'white';
-                keyEl.style.border = '1px solid #333';
-                keyEl.style.marginRight = isBlackKey ? '-15px' : '2px';
-                keyEl.style.zIndex = isBlackKey ? '1' : '0';
-                keyEl.style.position = 'relative';
-                keyEl.style.borderRadius = '0 0 4px 4px';
-                keyEl.style.cursor = 'pointer';
-                
-                // Add note name at the bottom of white keys
-                if (!isBlackKey) {
-                    const noteNames = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
-                    const noteName = noteNames[Math.floor(note / 12) * 7 + [0, 2, 4, 5, 7, 9, 11].indexOf(note)];
-                    
-                    const nameEl = document.createElement('div');
-                    nameEl.textContent = noteName + (octave + 4);
-                    nameEl.style.position = 'absolute';
-                    nameEl.style.bottom = '5px';
-                    nameEl.style.left = '0';
-                    nameEl.style.right = '0';
-                    nameEl.style.textAlign = 'center';
-                    nameEl.style.fontSize = '12px';
-                    keyEl.appendChild(nameEl);
-                }
-                
-                // Add click event listener only
-                keyEl.addEventListener('click', () => {
-                    // Visual feedback
-                    const originalColor = isBlackKey ? '#333' : 'white';
-                    const pressedColor = isBlackKey ? '#555' : '#e6e6e6';
-                    
-                    keyEl.style.backgroundColor = pressedColor;
-                    
-                    // Send note on event
-                    sendMidiEvent(true, midiNote, 100);
-                    
-                    // Send note off event after a short delay
-                    setTimeout(() => {
-                        sendMidiEvent(false, midiNote, 0);
-                        keyEl.style.backgroundColor = originalColor;
-                    }, 300);
+                // Add event listeners for mouse interaction
+                key.addEventListener('mousedown', function() {
+                    playNote(this.dataset.note);
+                    this.classList.add('active');
                 });
                 
-                virtualKeyboardEl.appendChild(keyEl);
-            }
-        }
-    }
-    
-    // Send MIDI event from virtual keyboard
-    async function sendMidiEvent(isNoteOn, note, velocity) {
-        try {
-            const response = await fetch(`${apiBaseUrl}/event?isNoteOn=${isNoteOn}&note=${note}&velocity=${velocity}`, {
-                method: 'POST'
-            });
-            
-            const data = await response.json();
-            log(`MIDI Event: ${data.message}`);
-        } catch (error) {
-            log(`Error sending MIDI event: ${error.message}`);
-        }
-    }
-    
-    // Load available MIDI devices
-    async function loadDevices() {
-        try {
-            const response = await fetch(`${apiBaseUrl}/devices`);
-            const devices = await response.json();
-            
-            // Clear existing options
-            deviceSelectEl.innerHTML = '<option value="">-- Select MIDI Device --</option>';
-            
-            // Add device options
-            devices.forEach(device => {
-                const option = document.createElement('option');
-                option.value = device;
-                option.textContent = device;
-                deviceSelectEl.appendChild(option);
-            });
-            
-            log(`Loaded ${devices.length} MIDI devices`);
-        } catch (error) {
-            log(`Error loading devices: ${error.message}`);
-        }
-    }
-    
-    // Load users
-    async function loadUsers() {
-        if (!userSelectEl) return;
-        
-        try {
-            const response = await fetch('/api/users');
-            const users = await response.json();
-            
-            // Clear existing options
-            userSelectEl.innerHTML = '<option value="">-- Select User --</option>';
-            
-            // Add user options
-            users.forEach(user => {
-                const option = document.createElement('option');
-                option.value = user.id;
-                option.textContent = user.username;
-                userSelectEl.appendChild(option);
-            });
-            
-            log(`Loaded ${users.length} users`);
-        } catch (error) {
-            log(`Error loading users: ${error.message}`);
-        }
-    }
-    
-    // Set current user
-    async function setCurrentUser(userId) {
-        try {
-            const response = await fetch(`${apiBaseUrl}/set-user?userId=${userId}`, {
-                method: 'POST'
-            });
-            const data = await response.json();
-            log(`Set current user: ${data.message}`);
-        } catch (error) {
-            log(`Error setting user: ${error.message}`);
-        }
-    }
-    
-    // Connect to selected MIDI device
-    async function connectToDevice() {
-        const deviceName = deviceSelectEl.value;
-        
-        if (!deviceName) {
-            log('Please select a MIDI device');
-            return;
-        }
-        
-        try {
-            const response = await fetch(`${apiBaseUrl}/device/connect?deviceName=${encodeURIComponent(deviceName)}`, {
-                method: 'POST'
-            });
-            
-            const data = await response.json();
-            
-            if (data.status === 'success') {
-                isConnected = true;
-                log(`Connected to device: ${deviceName}`);
-                updateUIState();
-            } else {
-                log(`Failed to connect: ${data.message}`);
-            }
-        } catch (error) {
-            log(`Error connecting to device: ${error.message}`);
-        }
-    }
-    
-    // Disconnect from MIDI device
-    async function disconnectFromDevice() {
-        const deviceName = deviceSelectEl.value;
-        
-        if (!deviceName) {
-            log('No device selected');
-            return;
-        }
-        
-        try {
-            const response = await fetch(`${apiBaseUrl}/device/disconnect?deviceName=${encodeURIComponent(deviceName)}`, {
-                method: 'POST'
-            });
-            
-            const data = await response.json();
-            
-            if (data.status === 'success') {
-                isConnected = false;
-                log(`Disconnected from device: ${deviceName}`);
-                updateUIState();
-            } else {
-                log(`Failed to disconnect: ${data.message}`);
-            }
-        } catch (error) {
-            log(`Error disconnecting from device: ${error.message}`);
-        }
-    }
-    
-    // Start recording
-    async function startRecording() {
-        const deviceName = deviceSelectEl.value;
-        
-        if (!deviceName) {
-            log('Please select a MIDI device');
-            return;
-        }
-        
-        try {
-            const response = await fetch(`${apiBaseUrl}/record/start?deviceName=${encodeURIComponent(deviceName)}`, {
-                method: 'POST'
-            });
-            
-            const data = await response.json();
-            
-            if (data.status === 'success') {
-                isRecording = true;
-                currentRecordingId = data.recordingId;
-                log(`Started recording with ID: ${currentRecordingId}`);
-                updateUIState();
-            } else {
-                log(`Failed to start recording: ${data.message}`);
-            }
-        } catch (error) {
-            log(`Error starting recording: ${error.message}`);
-        }
-    }
-    
-    // Stop recording
-    async function stopRecording() {
-        try {
-            const response = await fetch(`${apiBaseUrl}/record/stop`, {
-                method: 'POST'
-            });
-            
-            recordingData = await response.json();
-            isRecording = false;
-            
-            log(`Stopped recording. Captured ${recordingData.noteCount} notes`);
-            updateUIState();
-            updateRecordingInfo();
-        } catch (error) {
-            log(`Error stopping recording: ${error.message}`);
-        }
-    }
-    
-    // Download PDF
-    async function downloadPdf() {
-        if (!currentRecordingId) {
-            log('No recording available to download');
-            return;
-        }
-        
-        try {
-            log(`Downloading PDF for recording: ${currentRecordingId}`);
-            
-            // Get the selected user ID
-            const userId = userSelectEl ? userSelectEl.value : null;
-            
-            // Create a direct link to download the PDF
-            let downloadUrl = `${window.location.origin}/api/sheet-music/from-recording/${currentRecordingId}`;
-            
-            // Add user ID if selected
-            if (userId) {
-                downloadUrl += `?userId=${userId}`;
+                key.addEventListener('mouseup', function() {
+                    this.classList.remove('active');
+                });
+                
+                key.addEventListener('mouseleave', function() {
+                    this.classList.remove('active');
+                });
+                
+                // Add label to white keys
+                if (!isBlack) {
+                    const label = document.createElement('span');
+                    label.className = 'key-label';
+                    label.textContent = note + octave;
+                    key.appendChild(label);
+                }
+                
+                octaveContainer.appendChild(key);
             }
             
-            // Create a temporary link element and click it to trigger the download
-            const link = document.createElement('a');
-            link.href = downloadUrl;
-            link.target = '_blank';
-            link.download = `recording-${currentRecordingId}.pdf`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            log('PDF download initiated');
-        } catch (error) {
-            log(`Error downloading PDF: ${error.message}`);
+            pianoContainer.appendChild(octaveContainer);
         }
     }
     
-    // Simulate MIDI input
-    async function simulateMidiInput() {
-        try {
-            // Simulate a C major scale
-            const notes = [60, 62, 64, 65, 67, 69, 71, 72];
-            
-            const response = await fetch(`${apiBaseUrl}/simulate`, {
+    function playNote(note) {
+        // If connected to a MIDI device, send note to server
+        if (isConnected) {
+            fetch('/api/midi/play', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(notes)
+                body: JSON.stringify({ note: note })
+            })
+            .then(handleAuthError)
+            .catch(error => {
+                console.error('Error playing note:', error);
             });
-            
-            const data = await response.json();
-            
-            if (data.status === 'success') {
-                currentRecordingId = data.recordingId;
-                log(`Simulated MIDI input with recording ID: ${currentRecordingId}`);
-                
-                // Fetch the recording data
-                const recordingResponse = await fetch(`${apiBaseUrl}/recording/${currentRecordingId}`);
-                recordingData = await recordingResponse.json();
-                
-                updateRecordingInfo();
-                updateUIState();
-            } else {
-                log(`Failed to simulate MIDI input: ${data.message}`);
-            }
-        } catch (error) {
-            log(`Error simulating MIDI input: ${error.message}`);
         }
+        
+        // Also play note using Web Audio API for immediate feedback
+        playNoteLocally(note);
     }
     
-    // Update recording info display
-    function updateRecordingInfo() {
-        if (!recordingData) {
-            if (recordingInfoEl) recordingInfoEl.innerHTML = '<p>No active recording.</p>';
-            if (lilypondCodeEl) lilypondCodeEl.textContent = '% No LilyPond code generated yet';
-            if (noteDisplayEl) noteDisplayEl.innerHTML = '<p>No notes recorded yet.</p>';
-            return;
-        }
+    // Simple Web Audio API synthesizer for local playback
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    function playNoteLocally(note) {
+        const noteFrequencies = {
+            'C4': 261.63, 'C#4': 277.18, 'D4': 293.66, 'D#4': 311.13, 'E4': 329.63, 'F4': 349.23,
+            'F#4': 369.99, 'G4': 392.00, 'G#4': 415.30, 'A4': 440.00, 'A#4': 466.16, 'B4': 493.88,
+            'C5': 523.25, 'C#5': 554.37, 'D5': 587.33, 'D#5': 622.25, 'E5': 659.25, 'F5': 698.46,
+            'F#5': 739.99, 'G5': 783.99, 'G#5': 830.61, 'A5': 880.00, 'A#5': 932.33, 'B5': 987.77
+        };
         
-        // Update recording info tab
-        if (recordingInfoEl) {
-            recordingInfoEl.innerHTML = `
-                <h3>Recording ID: ${recordingData.id}</h3>
-                <p>Notes: ${recordingData.noteCount}</p>
-                <p>Duration: ${Math.round(recordingData.duration / 1000)} seconds</p>
-                ${recordingData.sheetMusicId ? `<p>Sheet Music ID: ${recordingData.sheetMusicId}</p>` : ''}
-                ${recordingData.userId ? `<p>User ID: ${recordingData.userId}</p>` : ''}
-            `;
-        }
+        const frequency = noteFrequencies[note];
+        if (!frequency) return;
         
-        // Update LilyPond code tab
-        if (lilypondCodeEl) {
-            lilypondCodeEl.textContent = recordingData.lilyPondCode || '% No LilyPond code generated';
-        }
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
         
-        // Update notes tab
-        if (noteDisplayEl) {
-            if (recordingData.notes && recordingData.notes.length > 0) {
-                noteDisplayEl.innerHTML = '';
-                recordingData.notes.forEach(note => {
-                    const noteEl = document.createElement('div');
-                    noteEl.className = 'note';
-                    noteEl.textContent = `Note ${note.key} (${midiNoteToName(note.key)}) - Velocity: ${note.velocity} - Duration: ${Math.round(note.duration)}ms`;
-                    noteDisplayEl.appendChild(noteEl);
+        oscillator.type = 'sine';
+        oscillator.frequency.value = frequency;
+        
+        gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1);
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 1);
+    }
+    
+    /**
+     * User Recordings Functions
+     */
+    function loadUserRecordings() {
+        fetch('/api/sheetmusic')
+            .then(handleAuthError)
+            .then(response => {
+                if (response) {
+                    return response.json();
+                }
+                return null;
+            })
+            .then(recordings => {
+                if (!recordings) return;
+                
+                recordingsList.innerHTML = '';
+                
+                if (recordings.length === 0) {
+                    recordingsList.innerHTML = '<p>No recordings yet.</p>';
+                    return;
+                }
+                
+                recordings.forEach(recording => {
+                    const item = document.createElement('div');
+                    item.className = 'recording-item';
+                    
+                    const title = document.createElement('h4');
+                    title.textContent = recording.title;
+                    
+                    const description = document.createElement('p');
+                    description.textContent = recording.description || 'No description';
+                    
+                    const date = document.createElement('p');
+                    date.className = 'recording-date';
+                    date.textContent = 'Created: ' + new Date(recording.createdAt).toLocaleString();
+                    
+                    const actions = document.createElement('div');
+                    actions.className = 'recording-actions';
+                    
+                    const viewPdfBtn = document.createElement('a');
+                    viewPdfBtn.className = 'btn btn-sm btn-primary';
+                    viewPdfBtn.textContent = 'View PDF';
+                    viewPdfBtn.href = `/api/sheetmusic/${recording.id}/pdf`;
+                    viewPdfBtn.target = '_blank';
+                    
+                    const downloadMidiBtn = document.createElement('a');
+                    downloadMidiBtn.className = 'btn btn-sm btn-secondary';
+                    downloadMidiBtn.textContent = 'Download MIDI';
+                    downloadMidiBtn.href = `/api/sheetmusic/${recording.id}/midi`;
+                    downloadMidiBtn.download = `recording-${recording.id}.midi`;
+                    
+                    actions.appendChild(viewPdfBtn);
+                    actions.appendChild(downloadMidiBtn);
+                    
+                    item.appendChild(title);
+                    item.appendChild(description);
+                    item.appendChild(date);
+                    item.appendChild(actions);
+                    
+                    recordingsList.appendChild(item);
                 });
-            } else {
-                noteDisplayEl.innerHTML = '<p>No notes recorded.</p>';
-            }
-        }
+            })
+            .catch(error => {
+                console.error('Error loading recordings:', error);
+                updateStatus('Error loading recordings', 'error');
+            });
     }
-    
-    // Convert MIDI note number to note name
-    function midiNoteToName(midiNote) {
-        const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-        const octave = Math.floor(midiNote / 12) - 1;
-        const noteName = noteNames[midiNote % 12];
-        return `${noteName}${octave}`;
-    }
-    
-    // Update UI state based on connection and recording status
-    function updateUIState() {
-        // Update button states
-        if (connectBtn) connectBtn.disabled = isConnected;
-        if (disconnectBtn) disconnectBtn.disabled = !isConnected;
-        if (startRecordingBtn) startRecordingBtn.disabled = !isConnected || isRecording;
-        if (stopRecordingBtn) stopRecordingBtn.disabled = !isRecording;
-        if (downloadPdfBtn) downloadPdfBtn.disabled = !currentRecordingId;
-        
-        // Update status display
-        if (statusDisplayEl) {
-            let statusClass = 'status-disconnected';
-            let statusText = 'Disconnected';
-            
-            if (isConnected) {
-                statusClass = isRecording ? 'status-recording' : 'status-connected';
-                statusText = isRecording ? 'Recording' : 'Connected';
-            }
-            
-            statusDisplayEl.innerHTML = `<p><span class="status-indicator ${statusClass}"></span> Status: ${statusText}</p>`;
-        }
-    }
-    
-    // Log a message to the log container
-    function log(message) {
-        if (!logContainerEl) {
-            console.log(message);
-            return;
-        }
-        
-        const logEntry = document.createElement('div');
-        logEntry.className = 'log-entry';
-        
-        const time = new Date().toLocaleTimeString();
-        logEntry.innerHTML = `<span class="log-time">[${time}]</span> ${message}`;
-        
-        logContainerEl.appendChild(logEntry);
-        logContainerEl.scrollTop = logContainerEl.scrollHeight;
-    }
-    
-    // CSRF token handling for secure requests
-    function getCsrfToken() {
-        const tokenEl = document.querySelector('meta[name="_csrf"]');
-        return tokenEl ? tokenEl.getAttribute('content') : null;
-    }
-    
-    function getCsrfHeader() {
-        const headerEl = document.querySelector('meta[name="_csrf_header"]');
-        return headerEl ? headerEl.getAttribute('content') : 'X-CSRF-TOKEN';
-    }
-    
-    // Initialize when DOM is loaded
-    init();
 });
