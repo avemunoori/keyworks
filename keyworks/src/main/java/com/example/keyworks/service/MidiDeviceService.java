@@ -984,4 +984,82 @@ public class MidiDeviceService {
             return device;
         }
     }
+
+        /**
+     * Check if a MIDI device is connected
+     * @return true if a device is connected
+     */
+    public boolean isConnected() {
+        return !openDevices.isEmpty();
+    }
+
+    /**
+     * Check if recording is in progress
+     * @return true if recording
+     */
+    public boolean isRecording() {
+        return isRecording;
+    }
+
+    /**
+     * Get the name of the current MIDI device
+     * @return The device name or null if no device is connected
+     */
+    public String getCurrentDevice() {
+        if (openDevices.isEmpty()) {
+            return null;
+        }
+        // Return the name of the first open device
+        Map.Entry<String, MidiDevice> entry = openDevices.entrySet().iterator().next();
+        return entry.getKey();
+    }
+
+    /**
+     * Simulate a MIDI note event
+     * @param note The note name (e.g., "C4")
+     * @param velocity The velocity (0-127)
+     * @param noteOn true for note on, false for note off
+     */
+    public void simulateNote(String note, int velocity, boolean noteOn) {
+        int noteNumber = noteNameToMidiNumber(note);
+        long currentTime = System.currentTimeMillis();
+        
+        if (noteOn) {
+            processNoteOn(noteNumber, velocity, currentTime);
+            logger.info("Simulated Note On: {} (number: {}, velocity: {})", note, noteNumber, velocity);
+        } else {
+            processNoteOff(noteNumber, currentTime);
+            logger.info("Simulated Note Off: {} (number: {})", note, noteNumber);
+        }
+    }
+
+    /**
+     * Convert a note name to MIDI note number
+     * @param noteName The note name (e.g., "C4", "F#5")
+     * @return The MIDI note number
+     */
+    private int noteNameToMidiNumber(String noteName) {
+        // Parse the note name to get the MIDI note number
+        String note = noteName.substring(0, 1).toUpperCase();
+        int octave = Character.getNumericValue(noteName.charAt(noteName.length() - 1));
+        boolean sharp = noteName.contains("#");
+        boolean flat = noteName.contains("b");
+        
+        int baseNote;
+        switch (note) {
+            case "C": baseNote = 0; break;
+            case "D": baseNote = 2; break;
+            case "E": baseNote = 4; break;
+            case "F": baseNote = 5; break;
+            case "G": baseNote = 7; break;
+            case "A": baseNote = 9; break;
+            case "B": baseNote = 11; break;
+            default: baseNote = 0;
+        }
+        
+        if (sharp) baseNote++;
+        if (flat) baseNote--;
+        
+        return baseNote + (octave + 1) * 12;
+    }
 }
