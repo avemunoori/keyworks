@@ -3,536 +3,114 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Virtual MIDI Piano</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        
-        h1 {
-            color: #333;
-        }
-        
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-        
-        .status {
-            margin: 20px 0;
-            padding: 10px;
-            background-color: #e9e9e9;
-            border-radius: 5px;
-        }
-        
-        .controls {
-            margin: 20px 0;
-        }
-        
-        button {
-            padding: 10px 15px;
-            margin: 0 5px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        
-        button:hover {
-            background-color: #45a049;
-        }
-        
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        
-        .piano {
-            display: flex;
-            justify-content: center;
-            position: relative;
-            margin: 40px auto;
-            height: 200px;
-        }
-        
-        .key {
-            width: 60px;
-            height: 200px;
-            border: 1px solid #000;
-            box-sizing: border-box;
-            position: relative;
-            background: white;
-            margin: 0 2px;
-            border-radius: 0 0 5px 5px;
-        }
-        
-        .key.black {
-            background: black;
-            width: 40px;
-            height: 120px;
-            margin-left: -22px;
-            margin-right: -22px;
-            z-index: 2;
-        }
-        
-        .key.active {
-            background: #ccc;
-        }
-        
-        .key.black.active {
-            background: #333;
-        }
-        
-        .key .label {
-            position: absolute;
-            bottom: 10px;
-            width: 100%;
-            text-align: center;
-            color: #333;
-            font-weight: bold;
-        }
-        
-        .key.black .label {
-            color: white;
-        }
-        
-        .log {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #f0f0f0;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            height: 150px;
-            overflow-y: auto;
-            text-align: left;
-        }
-    </style>
+    <title>MIDI Note Capture</title>
+    <link rel="stylesheet" href="/css/piano.css">
 </head>
 <body>
+    <h1>MIDI Note Capture</h1>
+    
     <div class="container">
-        <h1>Virtual MIDI Piano</h1>
-        
-        <div class="status" id="midiStatus">MIDI Status: Checking...</div>
-        
-        <div class="controls">
-            <button id="connectBtn">Connect to MIDI</button>
-            <button id="startRecordingBtn" disabled>Start Recording</button>
-            <button id="stopRecordingBtn" disabled>Stop Recording</button>
-            <button id="debugBtn">Debug Devices</button>
-            <button id="testMidiBtn">Test MIDI Processing</button>
-            <button id="downloadPdfBtn" disabled>Download PDF</button>
+        <div class="panel">
+            <h2>Device Control</h2>
+            
+            <div class="user-selection">
+                <label for="userSelect">Select User:</label>
+                <select id="userSelect" class="user-select">
+                    <option value="">-- Select User --</option>
+                </select>
+                <button id="refreshUsersBtn">Refresh Users</button>
+            </div>
+            
+            <div class="controls">
+                <select id="deviceSelect">
+                    <option value="">-- Select MIDI Device --</option>
+                </select>
+                <button id="refreshBtn">Refresh Devices</button>
+            </div>
+            
+            <div class="controls">
+                <button id="connectBtn">Connect</button>
+                <button id="disconnectBtn">Disconnect</button>
+                <button id="startRecordingBtn">Start Recording</button>
+                <button id="stopRecordingBtn" disabled>Stop Recording</button>
+            </div>
+            
+            <div class="controls">
+                <button id="downloadPdfBtn" disabled>Download PDF</button>
+                <button id="simulateBtn">Simulate Input</button>
+            </div>
+            
+            <div id="statusDisplay">
+                <p><span class="status-indicator status-disconnected"></span> Status: Disconnected</p>
+            </div>
         </div>
         
-        <div class="piano" id="piano"></div>
-        
-        <div>
-            <p>Keyboard shortcuts: A,S,D,F,G,H,J,K for white keys and W,E,T,Y,U for black keys</p>
-        </div>
-        
-        <div class="log" id="log">
-            <div>MIDI and API logs will appear here...</div>
+        <div class="panel">
+            <h2>Log</h2>
+            <div id="logContainer" class="log-container"></div>
         </div>
     </div>
+    
+    <div class="panel">
+        <div class="tabs">
+            <div class="tab active" data-tab="recording">Recording Info</div>
+            <div class="tab" data-tab="lilypond">LilyPond Code</div>
+            <div class="tab" data-tab="notes">Notes</div>
+        </div>
+        
+        <div id="recordingTab" class="tab-content active">
+            <div id="recordingInfo" class="recording-info">
+                <p>No active recording.</p>
+            </div>
+        </div>
+        
+        <div id="lilypondTab" class="tab-content">
+            <pre id="lilypondCode" class="lilypond-code">% No LilyPond code generated yet</pre>
+        </div>
+        
+        <div id="notesTab" class="tab-content">
+            <div id="noteDisplay" class="note-display">
+                <p>No notes recorded yet.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="panel">
+        <h2>Virtual MIDI Keyboard</h2>
+        <p>Click the keys to play notes:</p>
+        <div id="virtualKeyboard"></div>
+    </div>
 
-    <script>
-        // DOM Elements
-        const midiStatusEl = document.getElementById('midiStatus');
-        const connectBtn = document.getElementById('connectBtn');
-        const startRecordingBtn = document.getElementById('startRecordingBtn');
-        const stopRecordingBtn = document.getElementById('stopRecordingBtn');
-        const debugBtn = document.getElementById('debugBtn');
-        const testMidiBtn = document.getElementById('testMidiBtn');
-        const downloadPdfBtn = document.getElementById('downloadPdfBtn');
-        const pianoEl = document.getElementById('piano');
-        const logEl = document.getElementById('log');
-        
-        // MIDI Variables
-        let midiAccess = null;
-        let midiOutput = null;
-        let apiBaseUrl = 'http://localhost:8080/api/midi';
-        let isRecording = false;
-        let currentRecordingId = null;
-        
-        // Piano Configuration
-        const startNote = 60; // Middle C
-        const keyCount = 13; // One octave + C
-        const keyMap = {
-            'a': 60, // C
-            'w': 61, // C#
-            's': 62, // D
-            'e': 63, // D#
-            'd': 64, // E
-            'f': 65, // F
-            't': 66, // F#
-            'g': 67, // G
-            'y': 68, // G#
-            'h': 69, // A
-            'u': 70, // A#
-            'j': 71, // B
-            'k': 72  // C
-        };
-        
-        // Log function
-        function log(message) {
-            const logItem = document.createElement('div');
-            logItem.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
-            logEl.appendChild(logItem);
-            logEl.scrollTop = logEl.scrollHeight;
-        }
-        
-        // Create piano keys
-        function createPianoKeys() {
-            const whiteNotes = [0, 2, 4, 5, 7, 9, 11, 12];
-            const blackNotes = [1, 3, null, 6, 8, 10, null];
-            const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B', 'C'];
+    <div class="panel">
+        <h2>Help</h2>
+        <div class="help-content">
+            <h3>Getting Started</h3>
+            <ol>
+                <li>Select a user from the dropdown (or login if using authentication)</li>
+                <li>Select a MIDI device from the dropdown</li>
+                <li>Click "Connect" to connect to the device</li>
+                <li>Click "Start Recording" to begin capturing MIDI notes</li>
+                <li>Play your MIDI instrument</li>
+                <li>Click "Stop Recording" when finished</li>
+                <li>Click "Download PDF" to get sheet music</li>
+            </ol>
             
-            // Create white keys first (they go behind)
-            for (let i = 0; i < whiteNotes.length; i++) {
-                const note = startNote + whiteNotes[i];
-                const key = document.createElement('div');
-                key.className = 'key';
-                key.dataset.note = note;
-                
-                const label = document.createElement('div');
-                label.className = 'label';
-                label.textContent = noteNames[whiteNotes[i]];
-                key.appendChild(label);
-                
-                pianoEl.appendChild(key);
-            }
+            <h3>Virtual Keyboard</h3>
+            <p>You can use the virtual keyboard to test MIDI input without a physical device:</p>
+            <ul>
+                <li>Click on keys to play notes</li>
+                <li>Start recording first to capture the notes</li>
+            </ul>
             
-            // Create black keys (they go on top)
-            for (let i = 0; i < blackNotes.length; i++) {
-                if (blackNotes[i] === null) continue;
-                
-                const note = startNote + blackNotes[i];
-                const key = document.createElement('div');
-                key.className = 'key black';
-                key.dataset.note = note;
-                
-                const label = document.createElement('div');
-                label.className = 'label';
-                label.textContent = noteNames[blackNotes[i]];
-                key.appendChild(label);
-                
-                pianoEl.appendChild(key);
-            }
-        }
-        
-        // Initialize Web MIDI
-        function initMIDI() {
-            if (navigator.requestMIDIAccess) {
-                navigator.requestMIDIAccess()
-                    .then(access => {
-                        midiAccess = access;
-                        midiStatusEl.textContent = 'MIDI Status: Available but not connected';
-                        connectBtn.disabled = false;
-                        log('Web MIDI API initialized successfully');
-                    })
-                    .catch(err => {
-                        midiStatusEl.textContent = 'MIDI Status: Error - ' + err.message;
-                        log('Web MIDI API Error: ' + err.message);
-                    });
-            } else {
-                midiStatusEl.textContent = 'MIDI Status: Web MIDI API not supported in this browser';
-                log('Web MIDI API not supported in this browser. Try Chrome or Edge.');
-            }
-        }
-        
-        // Connect to MIDI output
-        function connectToMIDI() {
-            if (!midiAccess) return;
-            
-            const outputs = Array.from(midiAccess.outputs.values());
-            log(`Found ${outputs.length} MIDI output devices`);
-            
-            // Look for Bus 1 or Virtual Piano
-            for (const output of outputs) {
-                log(`MIDI Output: ${output.name} (${output.manufacturer})`);
-                if (output.name.includes('Bus 1') || output.name.includes('Virtual Piano')) {
-                    midiOutput = output;
-                    midiStatusEl.textContent = `MIDI Status: Connected to ${output.name}`;
-                    startRecordingBtn.disabled = false;
-                    log(`Connected to MIDI output: ${output.name}`);
-                    return;
-                }
-            }
-            
-            // If we didn't find Bus 1, use the first available output
-            if (outputs.length > 0) {
-                midiOutput = outputs[0];
-                midiStatusEl.textContent = `MIDI Status: Connected to ${midiOutput.name}`;
-                startRecordingBtn.disabled = false;
-                log(`Connected to MIDI output: ${midiOutput.name}`);
-            } else {
-                midiStatusEl.textContent = 'MIDI Status: No MIDI outputs found';
-                log('No MIDI output devices found. Make sure your virtual MIDI device is set up.');
-            }
-        }
-        
-        // Send MIDI Note On message on multiple channels
-        function sendNoteOn(note, velocity = 100) {
-            if (midiOutput) {
-                // Try channel 0 (default)
-                midiOutput.send([0x90, note, velocity]);
-                log(`Sent Note On: ${note} (velocity: ${velocity}) on channel 0`);
-                
-                // Also try channel 1
-                midiOutput.send([0x91, note, velocity]);
-                log(`Sent Note On: ${note} (velocity: ${velocity}) on channel 1`);
-            }
-            
-            // Also send via HTTP as a fallback
-            sendMidiEventViaHttp(true, note, velocity);
-        }
-        
-        // Send MIDI Note Off message on multiple channels
-        function sendNoteOff(note) {
-            if (midiOutput) {
-                // Try channel 0 (default)
-                midiOutput.send([0x80, note, 0]);
-                log(`Sent Note Off: ${note} on channel 0`);
-                
-                // Also try channel 1
-                midiOutput.send([0x81, note, 0]);
-                log(`Sent Note Off: ${note} on channel 1`);
-            }
-            
-            // Also send via HTTP as a fallback
-            sendMidiEventViaHttp(false, note);
-        }
-        
-        // Send MIDI event via HTTP
-        async function sendMidiEventViaHttp(isNoteOn, note, velocity = 100) {
-            try {
-                const eventType = isNoteOn ? 'note-on' : 'note-off';
-                const response = await fetch(`${apiBaseUrl}/direct-midi-event`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        type: eventType,
-                        note: note,
-                        velocity: isNoteOn ? velocity : 0,
-                        timestamp: Date.now()
-                    })
-                });
-                const data = await response.json();
-                log(`Sent MIDI event via HTTP: ${eventType} note: ${note} - Response: ${JSON.stringify(data)}`);
-            } catch (error) {
-                log(`Error sending MIDI event via HTTP: ${error.message}`);
-            }
-        }
-        
-        // Function to directly connect to the Java backend
-        async function connectDirectly() {
-            try {
-                // Get the exact device name
-                const deviceName = midiOutput ? midiOutput.name : "Virtual Piano Bus 1";
-                
-                // First try to connect directly
-                log(`Connecting directly to device: ${deviceName}`);
-                const response = await fetch(`${apiBaseUrl}/listen-direct?deviceName=${encodeURIComponent(deviceName)}`, {
-                    method: 'POST'
-                });
-                const data = await response.json();
-                log(`API Direct Connect Response: ${JSON.stringify(data)}`);
-                
-                return data;
-            } catch (error) {
-                log(`API Error: ${error.message}`);
-                return null;
-            }
-        }
-        
-        // Function to debug MIDI devices
-        async function debugDevices() {
-            try {
-                const response = await fetch(`${apiBaseUrl}/debug-devices`);
-                const data = await response.json();
-                log(`Available MIDI devices: ${JSON.stringify(data.devices, null, 2)}`);
-                return data;
-            } catch (error) {
-                log(`API Error: ${error.message}`);
-                return null;
-            }
-        }
-        
-        // Function to test MIDI processing
-        async function testMidiProcessing() {
-            try {
-                const response = await fetch(`${apiBaseUrl}/test-midi-reception`);
-                const data = await response.json();
-                log(`MIDI processing test result: ${JSON.stringify(data)}`);
-                return data;
-            } catch (error) {
-                log(`Error testing MIDI processing: ${error.message}`);
-                return null;
-            }
-        }
-        
-        // Start recording via API
-        async function startRecording() {
-            if (!midiOutput) return;
-            
-            try {
-                // First connect directly to the device
-                await connectDirectly();
-                
-                // Then try the virtual approach with the exact device name
-                const deviceName = midiOutput.name;
-                log(`Connecting to device via virtual approach: ${deviceName}`);
-                const connectResponse = await fetch(`${apiBaseUrl}/listen-virtual?deviceName=${encodeURIComponent(deviceName)}`, {
-                    method: 'POST'
-                });
-                const connectData = await connectResponse.json();
-                log(`API Virtual Connect Response: ${JSON.stringify(connectData)}`);
-                
-                // Then start recording with the exact device name
-                log(`Starting recording on device: ${deviceName}`);
-                const response = await fetch(`${apiBaseUrl}/record/start?deviceName=${encodeURIComponent(deviceName)}`, {
-                    method: 'POST'
-                });
-                const data = await response.json();
-                
-                if (data.recordingId) {
-                    isRecording = true;
-                    startRecordingBtn.disabled = true;
-                    stopRecordingBtn.disabled = false;
-                    log(`Recording started with ID: ${data.recordingId}`);
-                } else {
-                    log(`Error starting recording: ${JSON.stringify(data)}`);
-                }
-            } catch (error) {
-                log(`API Error: ${error.message}`);
-            }
-        }
-        
-        // Stop recording via API
-        async function stopRecording() {
-            if (!isRecording) return;
-            
-            try {
-                const response = await fetch(`${apiBaseUrl}/record/stop`, {
-                    method: 'POST'
-                });
-                const data = await response.json();
-                
-                isRecording = false;
-                startRecordingBtn.disabled = false;
-                stopRecordingBtn.disabled = true;
-                
-                // Store the recording ID and enable the download button
-                currentRecordingId = data.id;
-                downloadPdfBtn.disabled = false;
-                
-                log(`Recording stopped. Notes captured: ${data.noteCount}`);
-                log(`LilyPond code: ${data.lilyPondCode}`);
-                log(`Notes: ${JSON.stringify(data.notes)}`);
-            } catch (error) {
-                log(`API Error: ${error.message}`);
-            }
-        }
-        
-        // Function to download PDF
-        async function downloadPdf() {
-            if (!currentRecordingId) {
-                log('No recording available to download');
-                return;
-            }
-            
-            try {
-                log(`Downloading PDF for recording: ${currentRecordingId}`);
-                
-                // Create a direct link to download the PDF
-                const downloadUrl = `${window.location.origin}/api/sheet-music/from-recording/${currentRecordingId}`;
-                
-                // Create a temporary link element and click it to trigger the download
-                const link = document.createElement('a');
-                link.href = downloadUrl;
-                link.target = '_blank';
-                link.download = `recording-${currentRecordingId}.pdf`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                
-                log('PDF download initiated');
-            } catch (error) {
-                log(`Error downloading PDF: ${error.message}`);
-            }
-        }
-        
-        // Handle key press/release
-        function handleKeyDown(event) {
-            const note = keyMap[event.key.toLowerCase()];
-            if (note) {
-                const keyElement = document.querySelector(`.key[data-note="${note}"]`);
-                if (keyElement && !keyElement.classList.contains('active')) {
-                    keyElement.classList.add('active');
-                    sendNoteOn(note);
-                }
-            }
-        }
-        
-        function handleKeyUp(event) {
-            const note = keyMap[event.key.toLowerCase()];
-            if (note) {
-                const keyElement = document.querySelector(`.key[data-note="${note}"]`);
-                if (keyElement) {
-                    keyElement.classList.remove('active');
-                    sendNoteOff(note);
-                }
-            }
-        }
-        
-        // Initialize the app
-        function init() {
-            createPianoKeys();
-            initMIDI();
-            
-            // Add event listeners
-            connectBtn.addEventListener('click', connectToMIDI);
-            startRecordingBtn.addEventListener('click', startRecording);
-            stopRecordingBtn.addEventListener('click', stopRecording);
-            debugBtn.addEventListener('click', debugDevices);
-            testMidiBtn.addEventListener('click', testMidiProcessing);
-            downloadPdfBtn.addEventListener('click', downloadPdf);
-            
-            // Add mouse/touch events to piano keys
-            const keys = document.querySelectorAll('.key');
-            keys.forEach(key => {
-                key.addEventListener('mousedown', () => {
-                    key.classList.add('active');
-                    sendNoteOn(parseInt(key.dataset.note));
-                });
-                
-                key.addEventListener('mouseup', () => {
-                    key.classList.remove('active');
-                    sendNoteOff(parseInt(key.dataset.note));
-                });
-                
-                key.addEventListener('mouseleave', () => {
-                    if (key.classList.contains('active')) {
-                        key.classList.remove('active');
-                        sendNoteOff(parseInt(key.dataset.note));
-                    }
-                });
-            });
-            
-            // Add keyboard events
-            document.addEventListener('keydown', handleKeyDown);
-            document.addEventListener('keyup', handleKeyUp);
-        }
-        
-        // Start the app when the page loads
-        window.addEventListener('load', init);
-    </script>
+            <h3>Simulation</h3>
+            <p>Click "Simulate Input" to generate a C major scale for testing.</p>
+        </div>
+    </div>
+    
+    <footer>
+        <p>&copy; 2025 MIDI Note Capture. All rights reserved.</p>
+    </footer>
+
+    <script src="/js/piano.js"></script>
 </body>
 </html>

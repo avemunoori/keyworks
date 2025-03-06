@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" 
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIDI Note Capture</title>
+    
+    <!-- CSRF tokens for security -->
+    <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}"/>
+    <meta name="_csrf_header" th:content="${_csrf != null ? _csrf.headerName : 'X-CSRF-TOKEN'}"/>
+    
+    <link rel="stylesheet" th:href="@{/css/piano.css}">
+</head>
+<body>
+    <h1>MIDI Note Capture</h1>
+    
+    <div class="container">
+        <div class="panel">
+            <h2>Device Control</h2>
+            
+            <!-- Authentication-aware user section -->
+            <div class="user-status">
+                <!-- Show when authenticated -->
+                <div sec:authorize="isAuthenticated()">
+                    <span>Logged in as: <strong sec:authentication="name">Username</strong></span>
+                    <form th:action="@{/logout}" method="post" style="display: inline;">
+                        <button type="submit">Logout</button>
+                    </form>
+                </div>
+                
+                <!-- Show when not authenticated -->
+                <div sec:authorize="!isAuthenticated()">
+                    <span>Not logged in</span>
+                    <a th:href="@{/login}" class="button">Login</a>
+                    <a th:href="@{/register}" class="button">Register</a>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <!-- Pre-populated device list -->
+                <select id="deviceSelect">
+                    <option value="">-- Select MIDI Device --</option>
+                    <option th:each="device : ${midiDevices}" 
+                            th:value="${device}" 
+                            th:text="${device}">Device Name</option>
+                </select>
+                <button id="refreshBtn">Refresh Devices</button>
+            </div>
+            
+            <div class="controls">
+                <button id="connectBtn">Connect</button>
+                <button id="disconnectBtn">Disconnect</button>
+                <button id="startRecordingBtn">Start Recording</button>
+                <button id="stopRecordingBtn" disabled>Stop Recording</button>
+            </div>
+            
+            <div class="controls">
+                <button id="downloadPdfBtn" disabled>Download PDF</button>
+                <button id="simulateBtn">Simulate Input</button>
+            </div>
+            
+            <div id="statusDisplay">
+                <p><span class="status-indicator status-disconnected"></span> Status: Disconnected</p>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h2>Log</h2>
+            <div id="logContainer" class="log-container"></div>
+        </div>
+    </div>
+    
+    <div class="panel">
+        <div class="tabs">
+            <div class="tab active" data-tab="recording">Recording Info</div>
+            <div class="tab" data-tab="lilypond">LilyPond Code</div>
+            <div class="tab" data-tab="notes">Notes</div>
+            <div class="tab" data-tab="history">Recording History</div>
+        </div>
+        
+        <div id="recordingTab" class="tab-content active">
+            <div id="recordingInfo" class="recording-info">
+                <p>No active recording.</p>
+            </div>
+        </div>
+        
+        <div id="lilypondTab" class="tab-content">
+            <pre id="lilypondCode" class="lilypond-code">% No LilyPond code generated yet</pre>
+        </div>
+        
+        <div id="notesTab" class="tab-content">
+            <div id="noteDisplay" class="note-display">
+                <p>No notes recorded yet.</p>
+            </div>
+        </div>
+        
+        <!-- New tab for recording history - only visible when authenticated -->
+        <div id="historyTab" class="tab-content">
+            <div sec:authorize="isAuthenticated()">
+                <h3>Your Recording History</h3>
+                <div th:if="${userRecordings != null and !userRecordings.empty}">
+                    <table class="recordings-table">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Date</th>
+                                <th>Notes</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr th:each="recording : ${userRecordings}">
+                                <td th:text="${recording.title}">Recording Title</td>
+                                <td th:text="${#temporals.format(recording.createdAt, 'yyyy-MM-dd HH:mm')}">2025-03-05</td>
+                                <td th:text="${recording.noteCount}">42</td>
+                                <td>
+                                    <a th:href="@{'/api/sheet-music/' + ${recording.id}}" class="button">View</a>
+                                    <a th:href="@{'/api/sheet-music/from-recording/' + ${recording.id}}" class="button">Download PDF</a>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div th:if="${userRecordings == null or userRecordings.empty}">
+                    <p>You don't have any recordings yet.</p>
+                </div>
+            </div>
+            <div sec:authorize="!isAuthenticated()">
+                <p>Please log in to view your recording history.</p>
+                <a th:href="@{/login}" class="button">Login</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="panel">
+        <h2>Virtual MIDI Keyboard</h2>
+        <p>Click the keys to play notes:</p>
+        <div id="virtualKeyboard"></div>
+    </div>
+
+    <div class="panel">
+        <h2>Help</h2>
+        <div class="help-content">
+            <h3>Getting Started</h3>
+            <ol>
+                <li sec:authorize="!isAuthenticated()">Login to your account to save recordings</li>
+                <li>Select a MIDI device from the dropdown</li>
+                <li>Click "Connect" to connect to the device</li>
+                <li>Click "Start Recording" to begin capturing MIDI notes</li>
+                <li>Play your MIDI instrument</li>
+                <li>Click "Stop Recording" when finished</li>
+                <li>Click "Download PDF" to get sheet music</li>
+            </ol>
+            
+            <h3>Virtual Keyboard</h3>
+            <p>You can use the virtual keyboard to test MIDI input without a physical device:</p>
+            <ul>
+                <li>Click on keys to play notes</li>
+                <li>Start recording first to capture the notes</li>
+            </ul>
+            
+            <h3>Simulation</h3>
+            <p>Click "Simulate Input" to generate a C major scale for testing.</p>
+        </div>
+    </div>
+    
+    <footer>
+        <p>&copy; 2025 MIDI Note Capture. All rights reserved.</p>
+        <p>Version: <span th:text="${appVersion != null ? appVersion : '1.0.0'}">1.0.0</span></p>
+    </footer>
+
+    <!-- Pass server data to JavaScript -->
+    <script th:inline="javascript">
+        /*<![CDATA[*/
+        // User information
+        const currentUser = /*[[${#authentication != null && !#strings.equals(#authentication.name, 'anonymousUser') ? #authentication.name : null}]]*/ null;
+        const currentUserId = /*[[${currentUserId}]]*/ null;
+        
+        // Pre-populated data
+        const availableDevices = /*[[${midiDevices}]]*/ [];
+        
+        // App configuration
+        const appConfig = {
+            maxRecordingTime: /*[[${maxRecordingTime != null ? maxRecordingTime : 300}]]*/ 300,
+            autoSave: /*[[${autoSave != null ? autoSave : false}]]*/ false
+        };
+        
+        console.log("Template initialized with user:", currentUser);
+        /*]]>*/
+    </script>
+    
+    <script th:src="@{/js/piano.js}"></script>
+</body>
+</html>
