@@ -257,6 +257,89 @@
             top: 5px;
         }
 
+        /* PDF Viewer */
+        .pdf-viewer-container {
+            display: none;
+            margin-top: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .pdf-viewer-container.visible {
+            display: block;
+        }
+
+        .pdf-viewer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            background-color: #f8fafc;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .pdf-viewer-title {
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .pdf-viewer-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .pdf-viewer-actions button {
+            width: auto;
+            padding: 4px 8px;
+            font-size: 0.75rem;
+        }
+
+        .pdf-viewer-frame {
+            width: 100%;
+            height: 500px;
+            border: none;
+        }
+
+        /* Recording Items */
+        .recording-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            background-color: #f8fafc;
+        }
+
+        .recording-item:last-child {
+            border-bottom: none;
+        }
+
+        .recording-info {
+            flex: 1;
+        }
+
+        .recording-title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .recording-timestamp {
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+
+        .recording-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .recording-actions button {
+            width: auto;
+            padding: 4px 8px;
+            font-size: 0.75rem;
+        }
+
         /* Help Section */
         .help-section {
             background-color: #f8fafc;
@@ -296,6 +379,67 @@
             color: #64748b;
         }
 
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.visible {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 8px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-title {
+            font-weight: 600;
+            font-size: 1.25rem;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            width: auto;
+        }
+
+        .modal-body {
+            padding: 0;
+            height: calc(90vh - 120px);
+        }
+
+        .modal-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
         /* Responsive Design */
         @media (max-width: 768px) {
             .main-grid {
@@ -320,6 +464,7 @@
                 <button id="startRecording" disabled>Start Recording</button>
                 <button id="stopRecording" disabled>Stop Recording</button>
                 <button id="downloadPDF" disabled>Download PDF</button>
+                <button id="viewPDF" disabled>View PDF</button>
                 <div class="status">Status: <span id="connectionStatus" class="disconnected">Disconnected</span></div>
             </div>
 
@@ -332,11 +477,11 @@
                 </div>
                 <div class="log-section" id="logContent">
                     <div class="log-entry info">
-                        <span class="log-timestamp">09:56:15</span>
+                        <span class="log-timestamp">10:01:38 PM</span>
                         <span>System initialized</span>
                     </div>
                     <div class="log-entry">
-                        <span class="log-timestamp">09:56:15</span>
+                        <span class="log-timestamp">10:01:38 PM</span>
                         <span>Waiting for MIDI device connection...</span>
                     </div>
                 </div>
@@ -352,10 +497,34 @@
             </div>
         </div>
 
+        <!-- PDF Viewer -->
+        <div class="pdf-viewer-container" id="pdfViewerContainer">
+            <div class="pdf-viewer-header">
+                <div class="pdf-viewer-title">Sheet Music Preview</div>
+                <div class="pdf-viewer-actions">
+                    <button id="closePdfViewer">Close</button>
+                    <button id="downloadPdfFromViewer" class="primary">Download</button>
+                </div>
+            </div>
+            <iframe class="pdf-viewer-frame" id="pdfViewerFrame"></iframe>
+        </div>
+
         <!-- Recording History -->
         <div class="recording-history">
             <h2>Recording History</h2>
-            <div class="empty-state" id="recordingHistory">You don't have any recordings yet.</div>
+            <div id="recordingHistory">
+                <!-- Example recording item (will be dynamically generated) -->
+                <div class="recording-item">
+                    <div class="recording-info">
+                        <div class="recording-title">Recording 1</div>
+                        <div class="recording-timestamp">March 5, 2025, 10:02:07 PM</div>
+                    </div>
+                    <div class="recording-actions">
+                        <button class="view-recording">View</button>
+                        <button class="download-recording primary">Download</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Virtual MIDI Keyboard -->
@@ -389,7 +558,8 @@
                 <li>Click "Start Recording" to begin capturing MIDI notes</li>
                 <li>Play your MIDI instrument</li>
                 <li>Click "Stop Recording" when finished</li>
-                <li>Click "Download PDF" to get sheet music</li>
+                <li>Click "View PDF" to preview the sheet music</li>
+                <li>Click "Download PDF" to save the sheet music to your computer</li>
             </ol>
 
             <h3>Virtual Keyboard</h3>
@@ -408,6 +578,19 @@
         </footer>
     </div>
 
+    <!-- PDF Viewer Modal -->
+    <div class="modal-overlay" id="pdfModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Sheet Music</div>
+                <button class="modal-close" id="closeModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <iframe class="modal-iframe" id="pdfModalFrame"></iframe>
+            </div>
+        </div>
+    </div>
+
     <script th:src="@{/web-piano/js/piano.js}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -418,10 +601,22 @@
             const startRecordingBtn = document.getElementById('startRecording');
             const stopRecordingBtn = document.getElementById('stopRecording');
             const downloadPDFBtn = document.getElementById('downloadPDF');
+            const viewPDFBtn = document.getElementById('viewPDF');
             const simulateInputBtn = document.getElementById('simulateInput');
             const clearLogBtn = document.getElementById('clearLog');
             const logContent = document.getElementById('logContent');
             const recordingHistory = document.getElementById('recordingHistory');
+            const pdfViewerContainer = document.getElementById('pdfViewerContainer');
+            const pdfViewerFrame = document.getElementById('pdfViewerFrame');
+            const closePdfViewer = document.getElementById('closePdfViewer');
+            const downloadPdfFromViewer = document.getElementById('downloadPdfFromViewer');
+            const pdfModal = document.getElementById('pdfModal');
+            const pdfModalFrame = document.getElementById('pdfModalFrame');
+            const closeModal = document.getElementById('closeModal');
+            
+            // Current recording data
+            let currentRecordingId = null;
+            let recordings = [];
             
             // Logging System
             const logger = {
@@ -495,6 +690,105 @@
                     logger.info('Disconnected from MIDI device');
                 }
             }
+            
+            // Generate a unique ID
+            function generateId() {
+                return Math.random().toString(36).substring(2, 15) + 
+                       Math.random().toString(36).substring(2, 15);
+            }
+            
+            // Add a recording to history
+            function addRecording(id, timestamp) {
+                // Create recording object
+                const recording = {
+                    id: id,
+                    timestamp: timestamp,
+                    pdfUrl: `/output/${id}.pdf`,
+                    midiUrl: `/output/${id}.midi`,
+                    lilypondUrl: `/output/${id}.ly`
+                };
+                
+                // Add to recordings array
+                recordings.push(recording);
+                
+                // Update UI
+                updateRecordingHistory();
+            }
+            
+            // Update recording history UI
+            function updateRecordingHistory() {
+                // Clear current history
+                recordingHistory.innerHTML = '';
+                
+                if (recordings.length === 0) {
+                    recordingHistory.innerHTML = '<div class="empty-state">You don\'t have any recordings yet.</div>';
+                    return;
+                }
+                
+                // Add each recording
+                recordings.forEach((recording, index) => {
+                    const recordingItem = document.createElement('div');
+                    recordingItem.className = 'recording-item';
+                    recordingItem.innerHTML = `
+                        <div class="recording-info">
+                            <div class="recording-title">Recording ${index + 1}</div>
+                            <div class="recording-timestamp">${recording.timestamp}</div>
+                        </div>
+                        <div class="recording-actions">
+                            <button class="view-recording" data-id="${recording.id}">View</button>
+                            <button class="download-recording primary" data-id="${recording.id}">Download</button>
+                        </div>
+                    `;
+                    recordingHistory.appendChild(recordingItem);
+                });
+                
+                // Add event listeners to new buttons
+                document.querySelectorAll('.view-recording').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const id = button.dataset.id;
+                        const recording = recordings.find(r => r.id === id);
+                        if (recording) {
+                            openPdfModal(recording.pdfUrl);
+                        }
+                    });
+                });
+                
+                document.querySelectorAll('.download-recording').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const id = button.dataset.id;
+                        const recording = recordings.find(r => r.id === id);
+                        if (recording) {
+                            downloadPdf(recording.pdfUrl);
+                        }
+                    });
+                });
+            }
+            
+            // Open PDF in viewer
+            function openPdfViewer(url) {
+                pdfViewerFrame.src = url;
+                pdfViewerContainer.classList.add('visible');
+                viewPDFBtn.disabled = true;
+                logger.info(`Opened PDF viewer for ${url}`);
+            }
+            
+            // Open PDF in modal
+            function openPdfModal(url) {
+                pdfModalFrame.src = url;
+                pdfModal.classList.add('visible');
+                logger.info(`Opened PDF modal for ${url}`);
+            }
+            
+            // Download PDF
+            function downloadPdf(url) {
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = url.split('/').pop();
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                logger.success(`Downloaded PDF: ${url}`);
+            }
 
             // Piano key interaction
             document.querySelectorAll('.key').forEach(key => {
@@ -530,38 +824,71 @@
                 startRecordingBtn.disabled = true;
                 stopRecordingBtn.disabled = false;
                 logger.success('Recording started');
+                
+                // Generate a new recording ID
+                currentRecordingId = generateId();
             });
             
             stopRecordingBtn.addEventListener('click', () => {
                 stopRecordingBtn.disabled = true;
+                viewPDFBtn.disabled = false;
                 downloadPDFBtn.disabled = false;
                 logger.success('Recording stopped');
                 logger.info('Processing MIDI data...');
+                
                 setTimeout(() => {
                     logger.success('MIDI data processed successfully');
+                    logger.info('Generating LilyPond notation...');
                     
-                    // Update recording history
-                    if (recordingHistory.classList.contains('empty-state')) {
-                        recordingHistory.innerHTML = '';
-                        recordingHistory.classList.remove('empty-state');
-                    }
-                    
-                    const recordingItem = document.createElement('div');
-                    recordingItem.className = 'recording-item';
-                    const timestamp = new Date().toLocaleString();
-                    recordingItem.innerHTML = `Recording ${timestamp} - <a href="#">Download</a>`;
-                    recordingHistory.appendChild(recordingItem);
+                    setTimeout(() => {
+                        logger.info('Compiling PDF...');
+                        
+                        setTimeout(() => {
+                            logger.success('PDF generated successfully');
+                            
+                            // Add recording to history
+                            const timestamp = new Date().toLocaleString();
+                            addRecording(currentRecordingId, timestamp);
+                        }, 800);
+                    }, 800);
                 }, 1000);
             });
             
+            viewPDFBtn.addEventListener('click', () => {
+                if (currentRecordingId) {
+                    const pdfUrl = `/output/${currentRecordingId}.pdf`;
+                    openPdfViewer(pdfUrl);
+                }
+            });
+            
             downloadPDFBtn.addEventListener('click', () => {
-                logger.info('Generating LilyPond notation...');
-                setTimeout(() => {
-                    logger.info('Compiling PDF...');
-                    setTimeout(() => {
-                        logger.success('PDF generated successfully');
-                    }, 800);
-                }, 800);
+                if (currentRecordingId) {
+                    const pdfUrl = `/output/${currentRecordingId}.pdf`;
+                    downloadPdf(pdfUrl);
+                }
+            });
+            
+            closePdfViewer.addEventListener('click', () => {
+                pdfViewerContainer.classList.remove('visible');
+                viewPDFBtn.disabled = false;
+            });
+            
+            downloadPdfFromViewer.addEventListener('click', () => {
+                if (currentRecordingId) {
+                    const pdfUrl = `/output/${currentRecordingId}.pdf`;
+                    downloadPdf(pdfUrl);
+                }
+            });
+            
+            closeModal.addEventListener('click', () => {
+                pdfModal.classList.remove('visible');
+            });
+            
+            // Close modal when clicking outside
+            pdfModal.addEventListener('click', (e) => {
+                if (e.target === pdfModal) {
+                    pdfModal.classList.remove('visible');
+                }
             });
             
             simulateInputBtn.addEventListener('click', () => {
@@ -598,6 +925,10 @@
             // Initial log entries
             logger.info('System initialized');
             logger.info('Waiting for MIDI device connection...');
+            
+            // Add some example recordings for demonstration
+            addRecording('21c8e1b0-42cb-4f78-9604-9e8a90a4ba9b', 'March 5, 2025, 9:45:12 PM');
+            addRecording('60e9b2fd-48f1-49ad-9df0-24f9b3708376', 'March 5, 2025, 10:02:07 PM');
         });
     </script>
 </body>
