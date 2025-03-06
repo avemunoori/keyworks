@@ -4,15 +4,16 @@ import com.example.keyworks.model.User;
 import com.example.keyworks.model.SheetMusic;
 import com.example.keyworks.service.MidiDeviceService;
 import com.example.keyworks.service.SheetMusicService;
+import com.example.keyworks.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 
 import java.util.List;
+import java.util.Optional;
 
 @Controller
 public class PianoController {
@@ -22,6 +23,9 @@ public class PianoController {
     
     @Autowired
     private SheetMusicService sheetMusicService;
+    
+    @Autowired
+    private UserService userService;
     
     @Value("${app.version:1.0.0}")
     private String appVersion;
@@ -51,13 +55,18 @@ public class PianoController {
         if (authentication != null && authentication.isAuthenticated() && 
             !authentication.getName().equals("anonymousUser")) {
             
-            // Get user ID
-            User user = ((UserDetails) authentication.getPrincipal()).getUser();
-            model.addAttribute("currentUserId", user.getId());
+            // Get user by username from the authentication object
+            String username = authentication.getName();
+            Optional<User> userOptional = userService.findUserByUsername(username);
             
-            // Get user recordings
-            List<SheetMusic> userRecordings = sheetMusicService.findSheetMusicByUser(user);
-            model.addAttribute("userRecordings", userRecordings);
+            if (userOptional.isPresent()) {
+                User user = userOptional.get();
+                model.addAttribute("currentUserId", user.getId());
+                
+                // Get user recordings
+                List<SheetMusic> userRecordings = sheetMusicService.findSheetMusicByUser(user);
+                model.addAttribute("userRecordings", userRecordings);
+            }
         }
         
         return "piano";

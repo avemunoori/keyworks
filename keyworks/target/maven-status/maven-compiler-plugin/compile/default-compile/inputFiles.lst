@@ -12,8 +12,11 @@
 /Users/aaryanvemunoori/Desktop/keyworks/keyworks/src/main/java/com/example/keyworks/model/SheetMusic.java
 /Users/aaryanvemunoori/Desktop/keyworks/keyworks/src/main/java/com/example/keyworks/model/User.java
 /Users/aaryanvemunoori/Desktop/keyworks/keyworks/src/main/java/com/example/keyworks/service/FileService.java
+/Users/aaryanvemunoori/Desktop/keyworks/keyworks/src/main/java/com/example/keyworks/config/SecurityConfig.java
 /Users/aaryanvemunoori/Desktop/keyworks/keyworks/src/main/java/com/example/keyworks/service/UserService.java
 /Users/aaryanvemunoori/Desktop/keyworks/keyworks/src/main/java/com/example/keyworks/midi/VirtualMidiKeyboardLauncher.java
+/Users/aaryanvemunoori/Desktop/keyworks/keyworks/src/main/java/com/example/keyworks/controller/LoginController.java
+/Users/aaryanvemunoori/Desktop/keyworks/keyworks/src/main/java/com/example/keyworks/controller/PianoController.java
 /Users/aaryanvemunoori/Desktop/keyworks/keyworks/src/main/java/com/example/keyworks/controller/TestController.java
 /Users/aaryanvemunoori/Desktop/keyworks/keyworks/src/main/java/com/example/keyworks/midi/VirtualMidiKeyboard.java
 /Users/aaryanvemunoori/Desktop/keyworks/keyworks/src/main/java/com/example/keyworks/service/MidiDeviceService.java

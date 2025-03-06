@@ -1,150 +1,241 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" 
-      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<html xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MIDI Note Capture</title>
-    
-    <!-- CSRF tokens for security -->
-    <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}"/>
-    <meta name="_csrf_header" th:content="${_csrf != null ? _csrf.headerName : 'X-CSRF-TOKEN'}"/>
-    
-    <link rel="stylesheet" th:href="@{/css/piano.css}">
+    <link rel="stylesheet" th:href="@{/web-piano/css/piano.css}">
+    <style>
+        /* Modern UI styles */
+        :root {
+            --primary-color: #2563eb;
+            --success-color: #22c55e;
+            --error-color: #ef4444;
+            --background-color: #f8fafc;
+            --card-background: #ffffff;
+            --border-color: #e2e8f0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.5;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--background-color);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            color: #1e293b;
+            margin: 0 0 1rem 0;
+        }
+
+        .card {
+            background: var(--card-background);
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .device-control {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            align-items: center;
+        }
+
+        select, button {
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #1d4ed8;
+        }
+
+        button:disabled {
+            background-color: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .status {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .status.connected {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+
+        .status.disconnected {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        .log-section {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 6px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .recording-history {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .recording-item {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .recording-item:last-child {
+            border-bottom: none;
+        }
+
+        .help-section {
+            background-color: #f8fafc;
+            border-left: 4px solid var(--primary-color);
+            padding: 1rem;
+        }
+
+        .help-section h3 {
+            margin-top: 0;
+            color: #1e293b;
+        }
+
+        .help-section ol {
+            padding-left: 1.25rem;
+            margin: 0;
+        }
+
+        .help-section li {
+            margin-bottom: 0.5rem;
+        }
+
+        .virtual-keyboard {
+            margin-top: 2rem;
+            text-align: center;
+        }
+
+        .simulate-input {
+            margin-top: 1rem;
+            text-align: center;
+        }
+
+        .footer {
+            margin-top: 2rem;
+            text-align: center;
+            color: #64748b;
+            font-size: 0.875rem;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .device-control {
+                grid-template-columns: 1fr;
+            }
+
+            .card {
+                padding: 1rem;
+            }
+        }
+    </style>
 </head>
 <body>
-    <h1>MIDI Note Capture</h1>
-    
     <div class="container">
-        <div class="panel">
-            <h2>Device Control</h2>
-            
-            <!-- Authentication-aware user section -->
-            <div class="user-status">
-                <!-- Show when authenticated -->
-                <div sec:authorize="isAuthenticated()">
-                    <span>Logged in as: <strong sec:authentication="name">Username</strong></span>
-                    <form th:action="@{/logout}" method="post" style="display: inline;">
-                        <button type="submit">Logout</button>
-                    </form>
-                </div>
-                
-                <!-- Show when not authenticated -->
-                <div sec:authorize="!isAuthenticated()">
-                    <span>Not logged in</span>
-                    <a th:href="@{/login}" class="button">Login</a>
-                    <a th:href="@{/register}" class="button">Register</a>
-                </div>
-            </div>
-            
-            <div class="controls">
-                <!-- Pre-populated device list -->
-                <select id="deviceSelect">
-                    <option value="">-- Select MIDI Device --</option>
-                    <option th:each="device : ${midiDevices}" 
-                            th:value="${device}" 
-                            th:text="${device}">Device Name</option>
-                </select>
-                <button id="refreshBtn">Refresh Devices</button>
-            </div>
-            
-            <div class="controls">
-                <button id="connectBtn">Connect</button>
-                <button id="disconnectBtn">Disconnect</button>
-                <button id="startRecordingBtn">Start Recording</button>
-                <button id="stopRecordingBtn" disabled>Stop Recording</button>
-            </div>
-            
-            <div class="controls">
-                <button id="downloadPdfBtn" disabled>Download PDF</button>
-                <button id="simulateBtn">Simulate Input</button>
-            </div>
-            
-            <div id="statusDisplay">
-                <p><span class="status-indicator status-disconnected"></span> Status: Disconnected</p>
-            </div>
-        </div>
-        
-        <div class="panel">
-            <h2>Log</h2>
-            <div id="logContainer" class="log-container"></div>
-        </div>
-    </div>
-    
-    <div class="panel">
-        <div class="tabs">
-            <div class="tab active" data-tab="recording">Recording Info</div>
-            <div class="tab" data-tab="lilypond">LilyPond Code</div>
-            <div class="tab" data-tab="notes">Notes</div>
-            <div class="tab" data-tab="history">Recording History</div>
-        </div>
-        
-        <div id="recordingTab" class="tab-content active">
-            <div id="recordingInfo" class="recording-info">
-                <p>No active recording.</p>
-            </div>
-        </div>
-        
-        <div id="lilypondTab" class="tab-content">
-            <pre id="lilypondCode" class="lilypond-code">% No LilyPond code generated yet</pre>
-        </div>
-        
-        <div id="notesTab" class="tab-content">
-            <div id="noteDisplay" class="note-display">
-                <p>No notes recorded yet.</p>
-            </div>
-        </div>
-        
-        <!-- New tab for recording history - only visible when authenticated -->
-        <div id="historyTab" class="tab-content">
-            <div sec:authorize="isAuthenticated()">
-                <h3>Your Recording History</h3>
-                <div th:if="${userRecordings != null and !userRecordings.empty}">
-                    <table class="recordings-table">
-                        <thead>
-                            <tr>
-                                <th>Title</th>
-                                <th>Date</th>
-                                <th>Notes</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr th:each="recording : ${userRecordings}">
-                                <td th:text="${recording.title}">Recording Title</td>
-                                <td th:text="${#temporals.format(recording.createdAt, 'yyyy-MM-dd HH:mm')}">2025-03-05</td>
-                                <td th:text="${recording.noteCount}">42</td>
-                                <td>
-                                    <a th:href="@{'/api/sheet-music/' + ${recording.id}}" class="button">View</a>
-                                    <a th:href="@{'/api/sheet-music/from-recording/' + ${recording.id}}" class="button">Download PDF</a>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div th:if="${userRecordings == null or userRecordings.empty}">
-                    <p>You don't have any recordings yet.</p>
-                </div>
-            </div>
-            <div sec:authorize="!isAuthenticated()">
-                <p>Please log in to view your recording history.</p>
-                <a th:href="@{/login}" class="button">Login</a>
-            </div>
-        </div>
-    </div>
-    
-    <div class="panel">
-        <h2>Virtual MIDI Keyboard</h2>
-        <p>Click the keys to play notes:</p>
-        <div id="virtualKeyboard"></div>
-    </div>
+        <header class="header">
+            <h1>MIDI Note Capture</h1>
+        </header>
 
-    <div class="panel">
-        <h2>Help</h2>
-        <div class="help-content">
+        <div class="card">
+            <h2>Device Control</h2>
+            <div class="device-control">
+                <select id="midiDevice" class="midi-device-select">
+                    <option value="">Select MIDI Device...</option>
+                </select>
+                <button id="refreshDevices" class="refresh-button">
+                    Refresh Devices
+                </button>
+                <button id="connect" class="connect-button">
+                    Connect
+                </button>
+                <button id="disconnect" class="disconnect-button" disabled>
+                    Disconnect
+                </button>
+                <button id="startRecording" class="record-button" disabled>
+                    Start Recording
+                </button>
+                <button id="stopRecording" class="stop-button" disabled>
+                    Stop Recording
+                </button>
+                <button id="downloadPDF" class="download-button" disabled>
+                    Download PDF
+                </button>
+            </div>
+            <div class="status-container">
+                Status: <span id="status" class="status disconnected">Disconnected</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Log</h2>
+            <div class="log-section" id="log">
+                <div class="recording-info">Recording Info</div>
+                <div class="lilypond-code">No LilyPond code generated yet</div>
+                <div class="notes">No notes recorded yet.</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Recording History</h2>
+            <div class="recording-history" id="recordingHistory">
+                <div class="empty-state">You don't have any recordings yet.</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Virtual MIDI Keyboard</h2>
+            <div class="virtual-keyboard" id="virtualKeyboard">
+                <p>Click the keys to play notes:</p>
+                <!-- Virtual keyboard will be inserted here by JavaScript -->
+            </div>
+        </div>
+
+        <div class="card help-section">
+            <h2>Help</h2>
             <h3>Getting Started</h3>
             <ol>
-                <li sec:authorize="!isAuthenticated()">Login to your account to save recordings</li>
                 <li>Select a MIDI device from the dropdown</li>
                 <li>Click "Connect" to connect to the device</li>
                 <li>Click "Start Recording" to begin capturing MIDI notes</li>
@@ -152,44 +243,89 @@
                 <li>Click "Stop Recording" when finished</li>
                 <li>Click "Download PDF" to get sheet music</li>
             </ol>
-            
+
             <h3>Virtual Keyboard</h3>
             <p>You can use the virtual keyboard to test MIDI input without a physical device:</p>
             <ul>
                 <li>Click on keys to play notes</li>
                 <li>Start recording first to capture the notes</li>
             </ul>
-            
-            <h3>Simulation</h3>
-            <p>Click "Simulate Input" to generate a C major scale for testing.</p>
-        </div>
-    </div>
-    
-    <footer>
-        <p>&copy; 2025 MIDI Note Capture. All rights reserved.</p>
-        <p>Version: <span th:text="${appVersion != null ? appVersion : '1.0.0'}">1.0.0</span></p>
-    </footer>
 
-    <!-- Pass server data to JavaScript -->
-    <script th:inline="javascript">
-        /*<![CDATA[*/
-        // User information
-        const currentUser = /*[[${#authentication != null && !#strings.equals(#authentication.name, 'anonymousUser') ? #authentication.name : null}]]*/ null;
-        const currentUserId = /*[[${currentUserId}]]*/ null;
-        
-        // Pre-populated data
-        const availableDevices = /*[[${midiDevices}]]*/ [];
-        
-        // App configuration
-        const appConfig = {
-            maxRecordingTime: /*[[${maxRecordingTime != null ? maxRecordingTime : 300}]]*/ 300,
-            autoSave: /*[[${autoSave != null ? autoSave : false}]]*/ false
-        };
-        
-        console.log("Template initialized with user:", currentUser);
-        /*]]>*/
+            <div class="simulate-input">
+                <button id="simulateInput" class="simulate-button">
+                    Simulate Input
+                </button>
+                <p>Click "Simulate Input" to generate a C major scale for testing.</p>
+            </div>
+        </div>
+
+        <footer class="footer">
+            <p>© 2025 MIDI Note Capture. All rights reserved. | Version: 1.0.0</p>
+        </footer>
+    </div>
+
+    <script th:src="@{/web-piano/js/piano.js}"></script>
+    <script>
+        // Initialize the UI
+        document.addEventListener('DOMContentLoaded', function() {
+            const status = document.getElementById('status');
+            const connectBtn = document.getElementById('connect');
+            const disconnectBtn = document.getElementById('disconnect');
+            const startRecordingBtn = document.getElementById('startRecording');
+            const stopRecordingBtn = document.getElementById('stopRecording');
+            const downloadPDFBtn = document.getElementById('downloadPDF');
+            const refreshDevicesBtn = document.getElementById('refreshDevices');
+            const midiDeviceSelect = document.getElementById('midiDevice');
+            const simulateInputBtn = document.getElementById('simulateInput');
+            const log = document.getElementById('log');
+
+            // Update status display
+            function updateStatus(connected) {
+                status.textContent = connected ? 'Connected' : 'Disconnected';
+                status.className = `status ${connected ? 'connected' : 'disconnected'}`;
+                connectBtn.disabled = connected;
+                disconnectBtn.disabled = !connected;
+                startRecordingBtn.disabled = !connected;
+                stopRecordingBtn.disabled = true;
+                downloadPDFBtn.disabled = true;
+            }
+
+            // Event listeners
+            connectBtn.addEventListener('click', () => {
+                // Add your connection logic here
+                updateStatus(true);
+            });
+
+            disconnectBtn.addEventListener('click', () => {
+                // Add your disconnection logic here
+                updateStatus(false);
+            });
+
+            startRecordingBtn.addEventListener('click', () => {
+                startRecordingBtn.disabled = true;
+                stopRecordingBtn.disabled = false;
+                // Add your recording start logic here
+            });
+
+            stopRecordingBtn.addEventListener('click', () => {
+                stopRecordingBtn.disabled = true;
+                downloadPDFBtn.disabled = false;
+                // Add your recording stop logic here
+            });
+
+            refreshDevicesBtn.addEventListener('click', () => {
+                // Add your device refresh logic here
+            });
+
+            simulateInputBtn.addEventListener('click', () => {
+                // Add your simulation logic here
+                log.innerHTML += '\nSimulating C major scale...';
+            });
+
+            // Initial status update
+            updateStatus(false);
+        });
     </script>
-    
-    <script th:src="@{/js/piano.js}"></script>
 </body>
 </html>
+
