@@ -1,5 +1,6 @@
 package com.example.keyworks.controller;
 
+import com.example.keyworks.model.Note;
 import com.example.keyworks.service.MidiDeviceService;
 import com.example.keyworks.service.MidiProcessingService;
 import org.slf4j.Logger;
@@ -7,6 +8,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -63,15 +66,33 @@ public class MidiController {
         
         logger.info("Processing MIDI data for recording ID: {} with {} notes", recordingId, notes.size());
         
-        boolean success = midiProcessingService.processMidiToLilyPond(recordingId, notes);
+        // Clear any existing notes
+        midiProcessingService.clearNotes();
+        
+        // Add the notes to the processing service
+        long timestamp = System.currentTimeMillis();
+        for (int i = 0; i < notes.size(); i++) {
+            String noteName = notes.get(i);
+            int midiNote = convertNoteNameToMidi(noteName);
+            int velocity = 64; // Medium velocity
+            long noteTimestamp = timestamp + (i * 500); // 500ms between notes
+            long duration = 400; // 400ms duration
+            
+            midiProcessingService.processNoteOn(midiNote, velocity, noteTimestamp);
+            midiProcessingService.processNoteOff(midiNote, noteTimestamp + duration);
+        }
+        
+        // Generate LilyPond file and compile to PDF
+        String baseFilename = midiProcessingService.generateLilyPondFile();
+        boolean success = (baseFilename != null);
         
         Map<String, String> response = new HashMap<>();
         if (success) {
             response.put("success", "true");
             response.put("recordingId", recordingId);
-            response.put("pdfUrl", "/output/" + recordingId + ".pdf");
-            response.put("midiUrl", "/output/" + recordingId + ".midi");
-            response.put("lilypondUrl", "/output/" + recordingId + ".ly");
+            response.put("pdfUrl", "/output/" + baseFilename + ".pdf");
+            response.put("midiUrl", "/output/" + baseFilename + ".midi");
+            response.put("lilypondUrl", "/output/" + baseFilename + ".ly");
             
             logger.info("Successfully processed MIDI data. PDF available at: {}", response.get("pdfUrl"));
             return ResponseEntity.ok(response);
@@ -166,6 +187,9 @@ public class MidiController {
                 recordingId = midiDeviceService.startRecording(devices.get(0));
             }
             
+            // Start recording in the processing service
+            midiProcessingService.startRecording();
+            
             logger.info("MIDI recording started successfully with ID: {}", recordingId);
             return ResponseEntity.ok(Map.of(
                 "success", "true",
@@ -193,6 +217,9 @@ public class MidiController {
             // Get the recording data from the service
             Map<String, Object> recordingData = midiDeviceService.stopRecording();
             
+            // Stop recording in the processing service
+            midiProcessingService.stopRecording();
+            
             // Create response with success status
             Map<String, Object> response = new HashMap<>();
             response.put("success", "true");
@@ -205,26 +232,13 @@ public class MidiController {
                 response.put("duration", recordingData.get("duration"));
                 response.put("lilyPondCode", recordingData.get("lilyPondCode"));
                 
-                // Process the recording to generate PDF, MIDI, etc.
-                String recordingId = (String) recordingData.get("id");
-                List<MidiDeviceService.MidiNote> midiNotes = (List<MidiDeviceService.MidiNote>) recordingData.get("notes");
+                // Generate sheet music from the recorded notes
+                String baseFilename = midiProcessingService.generateSheetMusic();
                 
-                // Convert MidiNote objects to simple note names for the processing service
-                List<String> noteNames = new ArrayList<>();
-                if (midiNotes != null) {
-                    for (MidiDeviceService.MidiNote note : midiNotes) {
-                        // Convert MIDI note number to note name
-                        noteNames.add(convertMidiNoteToName(note.getKey()));
-                    }
-                }
-                
-                // Process the notes to generate files
-                boolean success = midiProcessingService.processMidiToLilyPond(recordingId, noteNames);
-                
-                if (success) {
-                    response.put("pdfUrl", "/output/" + recordingId + ".pdf");
-                    response.put("midiUrl", "/output/" + recordingId + ".midi");
-                    response.put("lilypondUrl", "/output/" + recordingId + ".ly");
+                if (baseFilename != null) {
+                    response.put("pdfUrl", "/output/" + baseFilename + ".pdf");
+                    response.put("midiUrl", "/output/" + baseFilename + ".midi");
+                    response.put("lilypondUrl", "/output/" + baseFilename + ".ly");
                 }
             }
             
@@ -260,6 +274,18 @@ public class MidiController {
         
         logger.info("Simulating MIDI note: {} (velocity: {}, on: {})", note, velocity, noteOn);
         midiDeviceService.simulateNote(note, velocity, noteOn);
+        
+        // Also process the note in the MidiProcessingService if recording
+        if (midiProcessingService.isRecording()) {
+            int midiNote = convertNoteNameToMidi(note);
+            long timestamp = System.currentTimeMillis();
+            
+            if (noteOn) {
+                midiProcessingService.processNoteOn(midiNote, velocity, timestamp);
+            } else {
+                midiProcessingService.processNoteOff(midiNote, timestamp);
+            }
+        }
         
         return ResponseEntity.ok(Map.of(
             "success", "true",
@@ -297,5 +323,44 @@ public class MidiController {
         int octave = (noteNumber / 12) - 1;
         int note = noteNumber % 12;
         return noteNames[note] + octave;
+    }
+    
+    /**
+ * Convert note name to MIDI note number
+ * @param noteName Note name (e.g., "C4")
+ * @return MIDI note number
+ */
+    private int convertNoteNameToMidi(String noteName) {
+        if (noteName == null || noteName.length() < 2) {
+            return 60; // Default to middle C
+     }
+    
+     // Define the mapping of note names to their values using Map.ofEntries
+        Map<String, Integer> noteMap = Map.ofEntries(
+        Map.entry("C", 0), Map.entry("C#", 1), Map.entry("Db", 1),
+        Map.entry("D", 2), Map.entry("D#", 3), Map.entry("Eb", 3),
+        Map.entry("E", 4),
+        Map.entry("F", 5), Map.entry("F#", 6), Map.entry("Gb", 6),
+        Map.entry("G", 7), Map.entry("G#", 8), Map.entry("Ab", 8),
+        Map.entry("A", 9), Map.entry("A#", 10), Map.entry("Bb", 10),
+        Map.entry("B", 11)
+    );
+    
+    // Extract note and octave
+        String note = noteName.substring(0, noteName.length() - 1);
+        int octave;
+         try {
+          octave = Integer.parseInt(noteName.substring(noteName.length() - 1));
+         } catch (NumberFormatException e) {
+        octave = 4; // Default to middle octave
+        }
+    
+        // Calculate MIDI note number
+        Integer noteValue = noteMap.get(note);
+        if (noteValue == null) {
+        return 60; // Default to middle C
+        }
+    
+        return (octave + 1) * 12 + noteValue;
     }
 }
