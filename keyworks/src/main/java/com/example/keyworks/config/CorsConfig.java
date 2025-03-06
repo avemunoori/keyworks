@@ -8,6 +8,7 @@ import org.springframework.web.filter.CorsFilter;
 
 @Configuration
 public class CorsConfig {
+    
     @Bean
     public CorsFilter corsFilter() {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -15,10 +16,21 @@ public class CorsConfig {
         
         // Allow all origins for development
         config.addAllowedOrigin("*");
+        // Allow common HTTP methods
+        config.addAllowedMethod("GET");
+        config.addAllowedMethod("POST");
+        config.addAllowedMethod("PUT");
+        config.addAllowedMethod("DELETE");
+        config.addAllowedMethod("OPTIONS");
+        // Allow all headers
         config.addAllowedHeader("*");
-        config.addAllowedMethod("*");
+        // Allow credentials
+        config.setAllowCredentials(true);
         
-        source.registerCorsConfiguration("/api/**", config);
+        // Apply CORS configuration to all paths, including /output/**
+        source.registerCorsConfiguration("/**", config);
+        source.registerCorsConfiguration("/output/**", config);
+        
         return new CorsFilter(source);
     }
 }
