@@ -6,7 +6,6 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
@@ -19,30 +18,25 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+            .csrf(csrf -> csrf.disable())  // Disable CSRF for API endpoints
             .authorizeHttpRequests(authorize -> authorize
-                // Allow requests to these paths without authentication
-                .requestMatchers("/", "/piano", "/js/**", "/css/**", "/web-piano/**").permitAll()
-                // All other paths require authentication
+                // Public pages
+                .requestMatchers("/", "/piano", "/web-piano/**", "/js/**", "/css/**", "/login").permitAll()
+                // Public API endpoints
+                .requestMatchers("/api/midi/devices", "/api/midi/status").permitAll()
+                // Protected endpoints
                 .anyRequest().authenticated()
             )
             .formLogin(form -> form
-                // Specify a custom login page
                 .loginPage("/login")
-                // Set default success URL after login
                 .defaultSuccessUrl("/piano", true)
-                // Allow everyone to see the login page
                 .permitAll()
             )
             .logout(logout -> logout
-                .logoutSuccessUrl("/login?logout")
+                .logoutSuccessUrl("/piano")
                 .permitAll()
             );
-
-        // Disable CSRF for simplicity during development
-        // In production, you should enable CSRF protection
-        http.csrf(csrf -> csrf.disable());
-
-        // Build the SecurityFilterChain
+        
         return http.build();
     }
     
@@ -51,16 +45,21 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
     
-    // Temporary in-memory user for testing
-    // In production, replace with a proper UserDetailsService implementation
+    // For testing purposes only - replace with database authentication in production
     @Bean
-    public UserDetailsService userDetailsService() {
+    public InMemoryUserDetailsManager userDetailsService() {
         UserDetails user = User.builder()
             .username("user")
             .password(passwordEncoder().encode("password"))
             .roles("USER")
             .build();
-        
-        return new InMemoryUserDetailsManager(user);
+            
+        UserDetails admin = User.builder()
+            .username("admin")
+            .password(passwordEncoder().encode("admin"))
+            .roles("USER", "ADMIN")
+            .build();
+            
+        return new InMemoryUserDetailsManager(user, admin);
     }
 }
