@@ -2,7 +2,7 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
   <meta charset="UTF-8">
-  <title>MIDI Note Capture</title>
+  <title>KeyWorks - MIDI Note Capture</title>
   <link rel="stylesheet" th:href="@{/web-piano/css/piano.css}">
   <style>
       /* Modern UI styles */
@@ -446,11 +446,71 @@
               grid-template-columns: 1fr;
           }
       }
+      
+      /* Loading Spinner */
+      .spinner {
+          display: inline-block;
+          width: 20px;
+          height: 20px;
+          border: 2px solid rgba(255, 255, 255, 0.3);
+          border-radius: 50%;
+          border-top-color: #fff;
+          animation: spin 1s ease-in-out infinite;
+          margin-right: 8px;
+      }
+
+      @keyframes spin {
+          to { transform: rotate(360deg); }
+      }
+      
+      /* Toast Notifications */
+      .toast-container {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          z-index: 1100;
+      }
+
+      .toast {
+          background-color: #1e293b;
+          color: white;
+          padding: 12px 16px;
+          border-radius: 4px;
+          margin-bottom: 8px;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          display: flex;
+          align-items: center;
+          min-width: 250px;
+          max-width: 350px;
+          animation: slideIn 0.3s, fadeOut 0.5s 2.5s forwards;
+      }
+
+      .toast.success {
+          background-color: #16a34a;
+      }
+
+      .toast.error {
+          background-color: #dc2626;
+      }
+
+      .toast.warning {
+          background-color: #ca8a04;
+      }
+
+      @keyframes slideIn {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+      }
+
+      @keyframes fadeOut {
+          from { opacity: 1; }
+          to { opacity: 0; }
+      }
   </style>
 </head>
 <body>
   <div class="container">
-      <h1>MIDI Note Capture</h1>
+      <h1>KeyWorks - MIDI Note Capture</h1>
 
       <div class="main-grid">
           <!-- Left Column: Device Control -->
@@ -513,17 +573,7 @@
       <div class="recording-history">
           <h2>Recording History</h2>
           <div id="recordingHistory">
-              <!-- Example recording item (will be dynamically generated) -->
-              <div class="recording-item">
-                  <div class="recording-info">
-                      <div class="recording-title">Recording 1</div>
-                      <div class="recording-timestamp">March 5, 2025, 10:02:07 PM</div>
-                  </div>
-                  <div class="recording-actions">
-                      <button class="view-recording">View</button>
-                      <button class="download-recording primary">Download</button>
-                  </div>
-              </div>
+              <div class="empty-state">You don't have any recordings yet.</div>
           </div>
       </div>
 
@@ -533,18 +583,19 @@
           <p>Click the keys to play notes:</p>
           <div class="piano-keys">
               <!-- White keys -->
-              <div class="key" data-note="C"><div class="key-label">C</div></div>
-              <div class="key black" data-note="C#"><div class="key-label">C#</div></div>
-              <div class="key" data-note="D"><div class="key-label">D</div></div>
-              <div class="key black" data-note="D#"><div class="key-label">D#</div></div>
-              <div class="key" data-note="E"><div class="key-label">E</div></div>
-              <div class="key" data-note="F"><div class="key-label">F</div></div>
-              <div class="key black" data-note="F#"><div class="key-label">F#</div></div>
-              <div class="key" data-note="G"><div class="key-label">G</div></div>
-              <div class="key black" data-note="G#"><div class="key-label">G#</div></div>
-              <div class="key" data-note="A"><div class="key-label">A</div></div>
-              <div class="key black" data-note="A#"><div class="key-label">A#</div></div>
-              <div class="key" data-note="B"><div class="key-label">B</div></div>
+              <div class="key" data-note="C4"><div class="key-label">C4</div></div>
+              <div class="key black" data-note="C#4"><div class="key-label">C#4</div></div>
+              <div class="key" data-note="D4"><div class="key-label">D4</div></div>
+              <div class="key black" data-note="D#4"><div class="key-label">D#4</div></div>
+              <div class="key" data-note="E4"><div class="key-label">E4</div></div>
+              <div class="key" data-note="F4"><div class="key-label">F4</div></div>
+              <div class="key black" data-note="F#4"><div class="key-label">F#4</div></div>
+              <div class="key" data-note="G4"><div class="key-label">G4</div></div>
+              <div class="key black" data-note="G#4"><div class="key-label">G#4</div></div>
+              <div class="key" data-note="A4"><div class="key-label">A4</div></div>
+              <div class="key black" data-note="A#4"><div class="key-label">A#4</div></div>
+              <div class="key" data-note="B4"><div class="key-label">B4</div></div>
+              <div class="key" data-note="C5"><div class="key-label">C5</div></div>
           </div>
       </div>
 
@@ -571,10 +622,21 @@
 
           <button id="simulateInput">Simulate Input</button>
           <p>Click "Simulate Input" to generate a C major scale for testing.</p>
+          
+          <h3>Troubleshooting</h3>
+          <p>If you encounter issues with PDF generation:</p>
+          <ul>
+              <li>Make sure LilyPond is installed on your system</li>
+              <li>Check the LilyPond log tab for any error messages</li>
+              <li>Verify that the output directory is writable</li>
+              <li>Try the "Test PDF Generation" button below to verify your setup</li>
+          </ul>
+          
+          <button id="testPdfGeneration">Test PDF Generation</button>
       </div>
 
       <footer class="footer">
-          <p>© 2025 MIDI Note Capture. All rights reserved. | Version: 1.0.0</p>
+          <p>© 2025 KeyWorks MIDI Note Capture. All rights reserved. | Version: 1.0.0</p>
       </footer>
   </div>
 
@@ -590,11 +652,15 @@
           </div>
       </div>
   </div>
+  
+  <!-- Toast Notifications Container -->
+  <div class="toast-container" id="toastContainer"></div>
 
-  <script th:src="@{/web-piano/js/piano.js}"></script>
   <script>
       document.addEventListener('DOMContentLoaded', function() {
           // UI Elements
+          const midiDeviceSelect = document.getElementById('midiDevice');
+          const refreshDevicesBtn = document.getElementById('refreshDevices');
           const status = document.getElementById('connectionStatus');
           const connectBtn = document.getElementById('connect');
           const disconnectBtn = document.getElementById('disconnect');
@@ -603,6 +669,7 @@
           const downloadPDFBtn = document.getElementById('downloadPDF');
           const viewPDFBtn = document.getElementById('viewPDF');
           const simulateInputBtn = document.getElementById('simulateInput');
+          const testPdfGenerationBtn = document.getElementById('testPdfGeneration');
           const clearLogBtn = document.getElementById('clearLog');
           const logContent = document.getElementById('logContent');
           const recordingHistory = document.getElementById('recordingHistory');
@@ -613,13 +680,13 @@
           const pdfModal = document.getElementById('pdfModal');
           const pdfModalFrame = document.getElementById('pdfModalFrame');
           const closeModal = document.getElementById('closeModal');
-          const midiDeviceSelect = document.getElementById('midiDevice');
-          const refreshDevicesBtn = document.getElementById('refreshDevices');
+          const toastContainer = document.getElementById('toastContainer');
           
           // Current recording data
           let currentRecordingId = null;
           let recordings = [];
-          let recordedNotes = [];
+          let isConnected = false;
+          let isRecording = false;
           
           // Logging System
           const logger = {
@@ -652,6 +719,29 @@
               }
           };
           
+          // Toast Notification System
+          const toast = {
+              show: function(message, type = 'info', duration = 3000) {
+                  const toastElement = document.createElement('div');
+                  toastElement.className = `toast ${type}`;
+                  toastElement.textContent = message;
+                  toastContainer.appendChild(toastElement);
+                  
+                  setTimeout(() => {
+                      toastElement.remove();
+                  }, duration);
+              },
+              success: function(message) {
+                  this.show(message, 'success');
+              },
+              error: function(message) {
+                  this.show(message, 'error');
+              },
+              warning: function(message) {
+                  this.show(message, 'warning');
+              }
+          };
+          
           // Tab switching
           document.querySelectorAll('.log-tab').forEach(tab => {
               tab.addEventListener('click', () => {
@@ -681,16 +771,36 @@
 
           // Update connection status
           function updateStatus(connected) {
+              isConnected = connected;
               status.textContent = connected ? 'Connected' : 'Disconnected';
               status.className = connected ? 'connected' : 'disconnected';
               connectBtn.disabled = connected;
               disconnectBtn.disabled = !connected;
-              startRecordingBtn.disabled = !connected;
+              startRecordingBtn.disabled = !connected || isRecording;
+              stopRecordingBtn.disabled = !isRecording;
               
               if (connected) {
                   logger.success('Connected to MIDI device');
+                  toast.success('Connected to MIDI device');
               } else {
                   logger.info('Disconnected from MIDI device');
+                  if (isRecording) {
+                      stopRecording();
+                  }
+              }
+          }
+          
+          // Update recording status
+          function updateRecordingStatus(recording) {
+              isRecording = recording;
+              startRecordingBtn.disabled = recording || !isConnected;
+              stopRecordingBtn.disabled = !recording;
+              
+              if (recording) {
+                  logger.success('Recording started');
+                  toast.success('Recording started');
+              } else {
+                  logger.info('Recording stopped');
               }
           }
           
@@ -706,9 +816,9 @@
               const recording = {
                   id: id,
                   timestamp: timestamp,
-                  pdfUrl: `/output/${id}.pdf`,
-                  midiUrl: `/output/${id}.midi`,
-                  lilypondUrl: `/output/${id}.ly`
+                  pdfUrl: `/api/files/output/${id}.pdf`,
+                  midiUrl: `/api/files/output/${id}.midi`,
+                  lilypondUrl: `/api/files/output/${id}.ly`
               };
               
               // Add to recordings array
@@ -769,12 +879,10 @@
           
           // Open PDF in viewer
           function openPdfViewer(url) {
-              console.log("Opening PDF viewer for URL:", url);
-              
               fetch(url)
                   .then(response => {
                       if (!response.ok) {
-                          throw new Error(`PDF not found (status: ${response.status})`);
+                          throw new Error('PDF not found');
                       }
                       return response.blob();
                   })
@@ -787,54 +895,16 @@
                   })
                   .catch(error => {
                       logger.error(`Failed to load PDF: ${error.message}`);
-                      // Try to generate a test PDF
-                      const recordingId = url.split('/').pop().replace('.pdf', '');
-                      logger.info(`Attempting to generate test PDF for ID: ${recordingId}`);
-                      fetch(`/api/test/generate-pdf/${recordingId}`)
-                          .then(response => response.text())
-                          .then(text => {
-                              logger.info(`Test PDF generation result: ${text}`);
-                              // Check if the file exists now
-                              return fetch(`/api/test/check-file/${recordingId}`);
-                          })
-                          .then(response => response.text())
-                          .then(text => {
-                              logger.info(`File check result: ${text}`);
-                              // Try to open the PDF again
-                              setTimeout(() => {
-                                  fetch(url)
-                                      .then(response => {
-                                          if (!response.ok) {
-                                              throw new Error(`PDF still not found (status: ${response.status})`);
-                                          }
-                                          return response.blob();
-                                      })
-                                      .then(blob => {
-                                          const pdfUrl = URL.createObjectURL(blob);
-                                          pdfViewerFrame.src = pdfUrl;
-                                          pdfViewerContainer.classList.add('visible');
-                                          viewPDFBtn.disabled = true;
-                                          logger.success(`Successfully opened PDF viewer for ${url}`);
-                                      })
-                                      .catch(err => {
-                                          logger.error(`Failed to load PDF after generation: ${err.message}`);
-                                      });
-                              }, 1000);
-                          })
-                          .catch(err => {
-                              logger.error(`Test PDF generation failed: ${err.message}`);
-                          });
+                      toast.error(`Failed to load PDF: ${error.message}`);
                   });
           }
           
           // Open PDF in modal
           function openPdfModal(url) {
-              console.log("Opening PDF modal for URL:", url);
-              
               fetch(url)
                   .then(response => {
                       if (!response.ok) {
-                          throw new Error(`PDF not found (status: ${response.status})`);
+                          throw new Error('PDF not found');
                       }
                       return response.blob();
                   })
@@ -846,26 +916,16 @@
                   })
                   .catch(error => {
                       logger.error(`Failed to load PDF: ${error.message}`);
-                      // List all files in the output directory
-                      fetch('/api/test/list-files')
-                          .then(response => response.text())
-                          .then(text => {
-                              logger.info(`Files in output directory: ${text}`);
-                          })
-                          .catch(err => {
-                              logger.error(`Failed to list files: ${err.message}`);
-                          });
+                      toast.error(`Failed to load PDF: ${error.message}`);
                   });
           }
           
           // Download PDF
           function downloadPdf(url) {
-              console.log("Downloading PDF from URL:", url);
-              
               fetch(url)
                   .then(response => {
                       if (!response.ok) {
-                          throw new Error(`PDF not found (status: ${response.status})`);
+                          throw new Error('PDF not found');
                       }
                       return response.blob();
                   })
@@ -878,37 +938,11 @@
                       document.body.removeChild(a);
                       URL.revokeObjectURL(a.href);
                       logger.success(`Downloaded PDF: ${url}`);
+                      toast.success('PDF downloaded successfully');
                   })
                   .catch(error => {
                       logger.error(`Failed to download PDF: ${error.message}`);
-                      // List all files in the output directory
-                      fetch('/api/test/list-files')
-                          .then(response => response.text())
-                          .then(text => {
-                              logger.info(`Files in output directory: ${text}`);
-                          })
-                          .catch(err => {
-                              logger.error(`Failed to list files: ${err.message}`);
-                          });
-                  });
-          }
-
-          // Load MIDI devices
-          function loadMidiDevices() {
-              fetch('/api/midi/devices')
-                  .then(response => response.json())
-                  .then(devices => {
-                      midiDeviceSelect.innerHTML = '<option value="">Select MIDI Device...</option>';
-                      devices.forEach(device => {
-                          const option = document.createElement('option');
-                          option.value = device;
-                          option.textContent = device;
-                          midiDeviceSelect.appendChild(option);
-                      });
-                      logger.info(`Loaded ${devices.length} MIDI devices`);
-                  })
-                  .catch(error => {
-                      logger.error(`Failed to load MIDI devices: ${error.message}`);
+                      toast.error(`Failed to download PDF: ${error.message}`);
                   });
           }
 
@@ -919,22 +953,9 @@
                   key.style.backgroundColor = key.classList.contains('black') ? '#333' : '#e5e5e5';
                   logger.info(`Note On: ${note}`);
                   
-                  // Send MIDI event to server if recording
-                  if (startRecordingBtn.disabled && !stopRecordingBtn.disabled) {
-                      fetch('/api/midi/simulate', {
-                          method: 'POST',
-                          headers: {
-                              'Content-Type': 'application/json'
-                          },
-                          body: JSON.stringify({
-                              note: note + '4', // Default to octave 4
-                              velocity: 100,
-                              noteOn: true
-                          })
-                      });
-                      
-                      // Add to recorded notes
-                      recordedNotes.push(note + '4');
+                  // Send note to server if recording
+                  if (isRecording) {
+                      simulateNote(note, 100, true);
                   }
               });
               
@@ -943,19 +964,9 @@
                   key.style.backgroundColor = key.classList.contains('black') ? '#000' : '#fff';
                   logger.info(`Note Off: ${note}`);
                   
-                  // Send MIDI event to server if recording
-                  if (startRecordingBtn.disabled && !stopRecordingBtn.disabled) {
-                      fetch('/api/midi/simulate', {
-                          method: 'POST',
-                          headers: {
-                              'Content-Type': 'application/json'
-                          },
-                          body: JSON.stringify({
-                              note: note + '4', // Default to octave 4
-                              velocity: 0,
-                              noteOn: false
-                          })
-                      });
+                  // Send note off to server if recording
+                  if (isRecording) {
+                      simulateNote(note, 0, false);
                   }
               });
               
@@ -963,166 +974,357 @@
                   key.style.backgroundColor = key.classList.contains('black') ? '#000' : '#fff';
               });
           });
-
-          // Button event listeners
-          refreshDevicesBtn.addEventListener('click', () => {
-              loadMidiDevices();
-          });
           
-          connectBtn.addEventListener('click', () => {
+          // Simulate a MIDI note
+          function simulateNote(note, velocity, noteOn) {
+              if (!isConnected) return;
+              
+              fetch('/api/midi/simulate', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                      note: note,
+                      velocity: velocity,
+                      noteOn: noteOn
+                  })
+              })
+              .then(response => response.json())
+              .then(data => {
+                  if (!data.success) {
+                      logger.warning(`Note simulation warning: ${data.error || 'Unknown error'}`);
+                  }
+              })
+              .catch(error => {
+                  logger.error(`Note simulation error: ${error.message}`);
+              });
+          }
+          
+          // Fetch MIDI devices
+          function fetchMidiDevices() {
+              logger.info('Fetching MIDI devices...');
+              
+              // Clear the select options except the first one
+              while (midiDeviceSelect.options.length > 1) {
+                  midiDeviceSelect.remove(1);
+              }
+              
+              fetch('/api/midi/devices')
+                  .then(response => response.json())
+                  .then(devices => {
+                      logger.info(`Found ${devices.length} MIDI devices`);
+                      
+                      if (devices.length === 0) {
+                          logger.warning('No MIDI devices found');
+                          toast.warning('No MIDI devices found');
+                          return;
+                      }
+                      
+                      // Add devices to select
+                      devices.forEach(device => {
+                          const option = document.createElement('option');
+                          option.value = device;
+                          option.textContent = device;
+                          midiDeviceSelect.appendChild(option);
+                      });
+                      
+                      logger.success('MIDI devices loaded');
+                  })
+                  .catch(error => {
+                      logger.error(`Failed to fetch MIDI devices: ${error.message}`);
+                      toast.error('Failed to fetch MIDI devices');
+                  });
+          }
+          
+          // Connect to MIDI device
+          function connectToDevice() {
               const deviceName = midiDeviceSelect.value;
+              
               if (!deviceName) {
-                  logger.warning('Please select a MIDI device');
+                  logger.warning('No MIDI device selected');
+                  toast.warning('Please select a MIDI device');
                   return;
               }
               
-              logger.info(`Attempting to connect to MIDI device: ${deviceName}`);
+              logger.info(`Connecting to MIDI device: ${deviceName}...`);
+              connectBtn.disabled = true;
+              connectBtn.innerHTML = '<span class="spinner"></span>Connecting...';
               
               fetch('/api/midi/connect', {
                   method: 'POST',
                   headers: {
                       'Content-Type': 'application/json'
                   },
-                  body: JSON.stringify({ deviceName })
+                  body: JSON.stringify({
+                      deviceName: deviceName
+                  })
               })
               .then(response => response.json())
               .then(data => {
-                  if (data.success === 'true') {
+                  connectBtn.innerHTML = 'Connect';
+                  
+                  if (data.success) {
                       updateStatus(true);
                   } else {
-                      logger.error(`Failed to connect: ${data.error}`);
+                      logger.error(`Failed to connect: ${data.error || 'Unknown error'}`);
+                      toast.error(`Failed to connect: ${data.error || 'Unknown error'}`);
+                      connectBtn.disabled = false;
                   }
               })
               .catch(error => {
                   logger.error(`Connection error: ${error.message}`);
+                  toast.error(`Connection error: ${error.message}`);
+                  connectBtn.innerHTML = 'Connect';
+                  connectBtn.disabled = false;
               });
-          });
+          }
           
-          disconnectBtn.addEventListener('click', () => {
+          // Disconnect from MIDI device
+          function disconnectDevice() {
+              logger.info('Disconnecting from MIDI device...');
+              disconnectBtn.disabled = true;
+              
               fetch('/api/midi/disconnect', {
                   method: 'POST'
               })
               .then(response => response.json())
               .then(data => {
-                  updateStatus(false);
+                  if (data.success) {
+                      updateStatus(false);
+                  } else {
+                      logger.error(`Failed to disconnect: ${data.error || 'Unknown error'}`);
+                      disconnectBtn.disabled = false;
+                  }
               })
               .catch(error => {
                   logger.error(`Disconnection error: ${error.message}`);
-                  updateStatus(false);
+                  disconnectBtn.disabled = false;
               });
-          });
+          }
           
-          startRecordingBtn.addEventListener('click', () => {
-              startRecordingBtn.disabled = true;
-              stopRecordingBtn.disabled = false;
+          // Start recording
+          function startRecording() {
+              if (!isConnected) {
+                  logger.warning('Cannot start recording: Not connected to a MIDI device');
+                  toast.warning('Please connect to a MIDI device first');
+                  return;
+              }
               
-              // Clear recorded notes
-              recordedNotes = [];
+              logger.info('Starting recording...');
+              startRecordingBtn.disabled = true;
+              startRecordingBtn.innerHTML = '<span class="spinner"></span>Starting...';
               
               fetch('/api/midi/record/start', {
                   method: 'POST'
               })
               .then(response => response.json())
               .then(data => {
-                  if (data.success === 'true') {
-                      currentRecordingId = data.recordingId || generateId();
+                  startRecordingBtn.innerHTML = 'Start Recording';
+                  
+                  if (data.success) {
+                      currentRecordingId = data.recordingId;
+                      updateRecordingStatus(true);
                       logger.success(`Recording started with ID: ${currentRecordingId}`);
                   } else {
-                      logger.error(`Failed to start recording: ${data.error}`);
+                      logger.error(`Failed to start recording: ${data.error || 'Unknown error'}`);
+                      toast.error(`Failed to start recording: ${data.error || 'Unknown error'}`);
                       startRecordingBtn.disabled = false;
-                      stopRecordingBtn.disabled = true;
                   }
               })
               .catch(error => {
-                  logger.error(`Recording error: ${error.message}`);
+                  logger.error(`Recording start error: ${error.message}`);
+                  toast.error(`Recording error: ${error.message}`);
+                  startRecordingBtn.innerHTML = 'Start Recording';
                   startRecordingBtn.disabled = false;
-                  stopRecordingBtn.disabled = true;
               });
-          });
+          }
           
-          stopRecordingBtn.addEventListener('click', () => {
+          // Stop recording
+          function stopRecording() {
+              if (!isRecording) {
+                  return;
+              }
+              
+              logger.info('Stopping recording...');
               stopRecordingBtn.disabled = true;
+              stopRecordingBtn.innerHTML = '<span class="spinner"></span>Processing...';
               
               fetch('/api/midi/record/stop', {
                   method: 'POST'
               })
               .then(response => response.json())
               .then(data => {
-                  if (data.success === 'true') {
-                      logger.success('Recording stopped');
-                      
-                      // If we have a recording ID from the server, use it
-                      if (data.recordingId) {
-                          currentRecordingId = data.recordingId;
-                      }
-                      
-                      // If we have a PDF URL, enable the buttons
-                      if (data.pdfUrl) {
-                          viewPDFBtn.disabled = false;
-                          downloadPDFBtn.disabled = false;
-                          
-                          // Add recording to history
-                          const timestamp = new Date().toLocaleString();
-                          addRecording(currentRecordingId, timestamp);
-                          
-                          logger.success(`PDF generated successfully at ${data.pdfUrl}`);
-                      } else {
-                          // Process the recording manually
-                          logger.info('Processing MIDI data...');
-                          
-                          fetch('/api/midi/process', {
-                              method: 'POST',
-                              headers: {
-                                  'Content-Type': 'application/json'
-                              },
-                              body: JSON.stringify({
-                                  recordingId: currentRecordingId,
-                                  notes: recordedNotes
-                              })
-                          })
-                          .then(response => response.json())
-                          .then(processData => {
-                              if (processData.success === 'true') {
-                                  viewPDFBtn.disabled = false;
-                                  downloadPDFBtn.disabled = false;
-                                  
-                                  // Add recording to history
-                                  const timestamp = new Date().toLocaleString();
-                                  addRecording(currentRecordingId, timestamp);
-                                  
-                                  logger.success(`PDF generated successfully at ${processData.pdfUrl}`);
-                              } else {
-                                  logger.error(`Failed to process MIDI data: ${processData.error}`);
-                              }
-                          })
-                          .catch(error => {
-                              logger.error(`Processing error: ${error.message}`);
-                          });
-                      }
-                  } else {
-                      logger.error(`Failed to stop recording: ${data.error}`);
-                  }
+                  stopRecordingBtn.innerHTML = 'Stop Recording';
                   
-                  startRecordingBtn.disabled = false;
+                  if (data.success) {
+                      updateRecordingStatus(false);
+                      
+                      // Enable PDF buttons
+                      viewPDFBtn.disabled = false;
+                      downloadPDFBtn.disabled = false;
+                      
+                      // Add recording to history
+                      const timestamp = new Date().toLocaleString();
+                      addRecording(data.recordingId, timestamp);
+                      
+                      logger.success('Recording stopped and processed');
+                      toast.success('Recording processed successfully');
+                      
+                      // Log details
+                      logger.info(`Notes recorded: ${data.noteCount || 'unknown'}`);
+                      logger.info(`Duration: ${data.duration || 'unknown'} seconds`);
+                      
+                      // Store current recording info
+                      currentRecordingId = data.recordingId;
+                  } else {
+                      logger.error(`Failed to stop recording: ${data.error || 'Unknown error'}`);
+                      toast.error(`Failed to process recording: ${data.error || 'Unknown error'}`);
+                      stopRecordingBtn.disabled = false;
+                  }
               })
               .catch(error => {
-                  logger.error(`Recording error: ${error.message}`);
-                  startRecordingBtn.disabled = false;
+                  logger.error(`Recording stop error: ${error.message}`);
+                  toast.error(`Recording error: ${error.message}`);
+                  stopRecordingBtn.innerHTML = 'Stop Recording';
                   stopRecordingBtn.disabled = false;
               });
-          });
+          }
+          
+          // Test PDF generation
+          function testPdfGeneration() {
+              const testId = generateId();
+              logger.info(`Testing PDF generation with ID: ${testId}...`);
+              testPdfGenerationBtn.disabled = true;
+              testPdfGenerationBtn.innerHTML = '<span class="spinner"></span>Testing...';
+              
+              fetch(`/api/test/generate-pdf/${testId}`)
+                  .then(response => {
+                      if (!response.ok) {
+                          throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                      }
+                      return response.text();
+                  })
+                  .then(result => {
+                      testPdfGenerationBtn.innerHTML = 'Test PDF Generation';
+                      testPdfGenerationBtn.disabled = false;
+                      
+                      logger.success('PDF test generation completed');
+                      logger.info(result);
+                      
+                      // Check if the file exists
+                      return fetch(`/api/test/check-file/${testId}`);
+                  })
+                  .then(response => {
+                      if (!response.ok) {
+                          throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                      }
+                      return response.text();
+                  })
+                  .then(result => {
+                      logger.info(result);
+                      
+                      // If file exists, open it
+                      if (result.includes('File exists: true')) {
+                          toast.success('Test PDF generated successfully');
+                          
+                          // Add to recordings for easy access
+                          const timestamp = new Date().toLocaleString();
+                          addRecording(testId, timestamp);
+                          
+                          // Open the PDF
+                          openPdfModal(`/api/files/output/${testId}.pdf`);
+                      } else {
+                          toast.error('PDF generation test failed');
+                      }
+                  })
+                  .catch(error => {
+                      logger.error(`PDF test generation error: ${error.message}`);
+                      toast.error(`PDF test failed: ${error.message}`);
+                      testPdfGenerationBtn.innerHTML = 'Test PDF Generation';
+                      testPdfGenerationBtn.disabled = false;
+                  });
+          }
+          
+          // Simulate input (C major scale)
+          function simulateInputSequence() {
+              if (!isRecording) {
+                  logger.warning('Please start recording first');
+                  toast.warning('Please start recording first');
+                  return;
+              }
+              
+              logger.info('Simulating C major scale...');
+              
+              const notes = ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5'];
+              let i = 0;
+              
+              const playNote = () => {
+                  if (i < notes.length) {
+                      const note = notes[i];
+                      logger.info(`Simulated Note On: ${note}`);
+                      
+                      // Find and highlight the key
+                      const key = document.querySelector(`.key[data-note="${note}"]`);
+                      if (key) {
+                          key.style.backgroundColor = key.classList.contains('black') ? '#333' : '#e5e5e5';
+                          
+                          // Send note to server
+                          simulateNote(note, 100, true);
+                          
+                          setTimeout(() => {
+                              key.style.backgroundColor = key.classList.contains('black') ? '#000' : '#fff';
+                              logger.info(`Simulated Note Off: ${note}`);
+                              
+                              // Send note off to server
+                              simulateNote(note, 0, false);
+                              
+                              i++;
+                              setTimeout(playNote, 300);
+                          }, 300);
+                      } else {
+                          i++;
+                          setTimeout(playNote, 300);
+                      }
+                  }
+              };
+              
+              playNote();
+          }
+          
+          // Check MIDI status
+          function checkMidiStatus() {
+              fetch('/api/midi/status')
+                  .then(response => response.json())
+                  .then(data => {
+                      updateStatus(data.connected);
+                      updateRecordingStatus(data.recording);
+                      
+                      if (data.connected) {
+                          logger.info(`Connected to device: ${data.currentDevice}`);
+                      }
+                  })
+                  .catch(error => {
+                      logger.error(`Failed to check MIDI status: ${error.message}`);
+                  });
+          }
+
+          // Button event listeners
+          refreshDevicesBtn.addEventListener('click', fetchMidiDevices);
+          connectBtn.addEventListener('click', connectToDevice);
+          disconnectBtn.addEventListener('click', disconnectDevice);
+          startRecordingBtn.addEventListener('click', startRecording);
+          stopRecordingBtn.addEventListener('click', stopRecording);
           
           viewPDFBtn.addEventListener('click', () => {
               if (currentRecordingId) {
-                  const pdfUrl = `/output/${currentRecordingId}.pdf`;
-                  openPdfViewer(pdfUrl);
+                  openPdfViewer(`/api/files/output/${currentRecordingId}.pdf`);
               }
           });
           
           downloadPDFBtn.addEventListener('click', () => {
               if (currentRecordingId) {
-                  const pdfUrl = `/output/${currentRecordingId}.pdf`;
-                  downloadPdf(pdfUrl);
+                  downloadPdf(`/api/files/output/${currentRecordingId}.pdf`);
               }
           });
           
@@ -1133,8 +1335,7 @@
           
           downloadPdfFromViewer.addEventListener('click', () => {
               if (currentRecordingId) {
-                  const pdfUrl = `/output/${currentRecordingId}.pdf`;
-                  downloadPdf(pdfUrl);
+                  downloadPdf(`/api/files/output/${currentRecordingId}.pdf`);
               }
           });
           
@@ -1149,114 +1350,16 @@
               }
           });
           
-          simulateInputBtn.addEventListener('click', () => {
-              logger.info('Simulating C major scale...');
-              
-              const notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'C'];
-              let i = 0;
-              
-              // Start recording if not already recording
-              if (!startRecordingBtn.disabled || stopRecordingBtn.disabled) {
-                  if (connectBtn.disabled) {
-                      startRecordingBtn.click();
-                      
-                      // Wait for recording to start
-                      setTimeout(() => {
-                          playSimulatedNotes(notes);
-                      }, 500);
-                  } else {
-                      logger.warning('Please connect to a MIDI device first');
-                  }
-              } else {
-                  playSimulatedNotes(notes);
-              }
-          });
-          
-          function playSimulatedNotes(notes) {
-              let i = 0;
-              const playNote = () => {
-                  if (i < notes.length) {
-                      const note = notes[i];
-                      logger.info(`Simulated Note On: ${note}`);
-                      
-                      // Send MIDI event to server
-                      fetch('/api/midi/simulate', {
-                          method: 'POST',
-                          headers: {
-                              'Content-Type': 'application/json'
-                          },
-                          body: JSON.stringify({
-                              note: note + '4', // Default to octave 4
-                              velocity: 100,
-                              noteOn: true
-                          })
-                      });
-                      
-                      // Add to recorded notes
-                      recordedNotes.push(note + '4');
-                      
-                      // Find and highlight the key
-                      const key = document.querySelector(`.key[data-note="${note}"]`);
-                      if (key) {
-                          key.style.backgroundColor = key.classList.contains('black') ? '#333' : '#e5e5e5';
-                          setTimeout(() => {
-                              key.style.backgroundColor = key.classList.contains('black') ? '#000' : '#fff';
-                              logger.info(`Simulated Note Off: ${note}`);
-                              
-                              // Send note off event
-                              fetch('/api/midi/simulate', {
-                                  method: 'POST',
-                                  headers: {
-                                      'Content-Type': 'application/json'
-                                  },
-                                  body: JSON.stringify({
-                                      note: note + '4',
-                                      velocity: 0,
-                                      noteOn: false
-                                  })
-                              });
-                              
-                              i++;
-                              setTimeout(playNote, 300);
-                          }, 300);
-                      } else {
-                          i++;
-                          setTimeout(playNote, 300);
-                      }
-                  } else {
-                      // Stop recording after playing all notes
-                      if (!stopRecordingBtn.disabled) {
-                          setTimeout(() => {
-                              stopRecordingBtn.click();
-                          }, 500);
-                      }
-                  }
-              };
-              
-              playNote();
-          }
+          simulateInputBtn.addEventListener('click', simulateInputSequence);
+          testPdfGenerationBtn.addEventListener('click', testPdfGeneration);
 
           // Initial setup
-          loadMidiDevices();
+          fetchMidiDevices();
+          checkMidiStatus();
+          
+          // Initial log entries
           logger.info('System initialized');
           logger.info('Waiting for MIDI device connection...');
-          
-          // Check MIDI connection status
-          fetch('/api/midi/status')
-              .then(response => response.json())
-              .then(data => {
-                  updateStatus(data.connected);
-                  if (data.connected && data.currentDevice) {
-                      logger.info(`Already connected to: ${data.currentDevice}`);
-                  }
-              })
-              .catch(error => {
-                  logger.error(`Status check error: ${error.message}`);
-              });
-          
-          // Add some example recordings for demonstration
-          addRecording('21c8e1b0-42cb-4f78-9604-9e8a90a4ba9b', 'March 5, 2025, 9:45:12 PM');
-          addRecording('60e9b2fd-48f1-49ad-9df0-24f9b3708376', 'March 5, 2025, 10:02:07 PM');
       });
   </script>
 </body>
