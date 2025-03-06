@@ -8,19 +8,24 @@
         /* Modern UI styles */
         :root {
             --primary-color: #2563eb;
-            --success-color: #22c55e;
-            --error-color: #ef4444;
-            --background-color: #f8fafc;
-            --card-background: #ffffff;
+            --background-color: #ffffff;
             --border-color: #e2e8f0;
+            --text-color: #1e293b;
+            --log-bg: #1e293b;
+            --log-text: #e2e8f0;
+            --log-info: #93c5fd;
+            --log-success: #86efac;
+            --log-warning: #fde68a;
+            --log-error: #fca5a5;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             line-height: 1.5;
             margin: 0;
             padding: 20px;
             background-color: var(--background-color);
+            color: var(--text-color);
         }
 
         .container {
@@ -28,211 +33,354 @@
             margin: 0 auto;
         }
 
-        .header {
-            margin-bottom: 2rem;
+        h1, h2 {
+            margin: 0 0 1rem 0;
+            color: var(--text-color);
         }
 
         h1 {
-            color: #1e293b;
-            margin: 0 0 1rem 0;
+            font-size: 1.5rem;
         }
 
-        .card {
-            background: var(--card-background);
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
+        h2 {
+            font-size: 1.25rem;
         }
 
-        .device-control {
+        /* Grid Layout */
+        .main-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            align-items: center;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        /* Device Control */
+        .device-control {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
         }
 
         select, button {
-            padding: 0.5rem;
+            width: 100%;
+            padding: 8px;
             border: 1px solid var(--border-color);
             border-radius: 4px;
-            font-size: 1rem;
+            font-size: 0.875rem;
         }
 
         button {
-            background-color: var(--primary-color);
-            color: white;
+            background-color: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            color: var(--text-color);
             cursor: pointer;
             transition: background-color 0.2s;
         }
 
-        button:hover {
-            background-color: #1d4ed8;
+        button:hover:not(:disabled) {
+            background-color: #e2e8f0;
         }
 
         button:disabled {
-            background-color: #94a3b8;
+            opacity: 0.5;
             cursor: not-allowed;
         }
 
-        .status {
-            display: inline-flex;
-            align-items: center;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.875rem;
-            font-weight: 500;
+        button.primary {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
         }
 
-        .status.connected {
-            background-color: #dcfce7;
-            color: #166534;
+        button.primary:hover:not(:disabled) {
+            background-color: #1d4ed8;
         }
 
-        .status.disconnected {
-            background-color: #fee2e2;
-            color: #991b1b;
+        /* Log Section */
+        .log-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .log-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .log-tab {
+            padding: 8px 16px;
+            cursor: pointer;
+            background: #f8fafc;
+            border: 1px solid var(--border-color);
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            margin-right: 4px;
+        }
+
+        .log-tab.active {
+            background: var(--log-bg);
+            color: var(--log-text);
         }
 
         .log-section {
-            background: #1e293b;
-            color: #e2e8f0;
+            background: var(--log-bg);
+            color: var(--log-text);
             padding: 1rem;
-            border-radius: 6px;
+            border-radius: 0 0 4px 4px;
             font-family: monospace;
-            white-space: pre-wrap;
-            max-height: 300px;
+            height: 200px;
             overflow-y: auto;
+            flex-grow: 1;
         }
 
-        .recording-history {
-            list-style: none;
-            padding: 0;
-            margin: 0;
+        .log-entry {
+            margin-bottom: 4px;
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        .recording-item {
-            padding: 1rem;
-            border-bottom: 1px solid var(--border-color);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .recording-item:last-child {
+        .log-entry:last-child {
             border-bottom: none;
         }
 
+        .log-entry.info {
+            color: var(--log-info);
+        }
+
+        .log-entry.success {
+            color: var(--log-success);
+        }
+
+        .log-entry.warning {
+            color: var(--log-warning);
+        }
+
+        .log-entry.error {
+            color: var(--log-error);
+        }
+
+        .log-timestamp {
+            color: #64748b;
+            font-size: 0.75rem;
+            margin-right: 8px;
+        }
+
+        .log-controls {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+        }
+
+        .log-level-filter {
+            display: flex;
+            gap: 8px;
+        }
+
+        .log-level-filter label {
+            display: flex;
+            align-items: center;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        .log-clear {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            background: #475569;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* Recording History */
+        .recording-history {
+            margin-top: 1rem;
+        }
+
+        .empty-state {
+            color: #64748b;
+            font-style: italic;
+        }
+
+        /* Virtual Keyboard */
+        .virtual-keyboard {
+            margin: 1rem 0;
+        }
+
+        .piano-keys {
+            display: flex;
+            justify-content: center;
+            height: 120px;
+            margin: 1rem 0;
+        }
+
+        .key {
+            position: relative;
+            width: 40px;
+            height: 100%;
+            border: 1px solid #000;
+            background: white;
+            cursor: pointer;
+        }
+
+        .key.black {
+            background: #000;
+            width: 24px;
+            height: 60%;
+            margin: 0 -12px;
+            z-index: 1;
+        }
+
+        .key:hover {
+            background: #f0f0f0;
+        }
+
+        .key.black:hover {
+            background: #333;
+        }
+
+        .key-label {
+            position: absolute;
+            bottom: 5px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10px;
+            color: #000;
+        }
+
+        .key.black .key-label {
+            color: #fff;
+            bottom: auto;
+            top: 5px;
+        }
+
+        /* Help Section */
         .help-section {
             background-color: #f8fafc;
             border-left: 4px solid var(--primary-color);
             padding: 1rem;
-        }
-
-        .help-section h3 {
-            margin-top: 0;
-            color: #1e293b;
+            margin-top: 1rem;
         }
 
         .help-section ol {
             padding-left: 1.25rem;
-            margin: 0;
+            margin: 0.5rem 0;
         }
 
         .help-section li {
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.25rem;
         }
 
-        .virtual-keyboard {
-            margin-top: 2rem;
-            text-align: center;
+        /* Status */
+        .status {
+            font-size: 0.875rem;
+            color: #64748b;
         }
 
-        .simulate-input {
-            margin-top: 1rem;
-            text-align: center;
+        .status.connected {
+            color: #16a34a;
         }
 
+        .status.disconnected {
+            color: #dc2626;
+        }
+
+        /* Footer */
         .footer {
             margin-top: 2rem;
             text-align: center;
+            font-size: 0.75rem;
             color: #64748b;
-            font-size: 0.875rem;
         }
 
-        /* Responsive adjustments */
+        /* Responsive Design */
         @media (max-width: 768px) {
-            .device-control {
+            .main-grid {
                 grid-template-columns: 1fr;
-            }
-
-            .card {
-                padding: 1rem;
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <header class="header">
-            <h1>MIDI Note Capture</h1>
-        </header>
+        <h1>MIDI Note Capture</h1>
 
-        <div class="card">
-            <h2>Device Control</h2>
+        <div class="main-grid">
+            <!-- Left Column: Device Control -->
             <div class="device-control">
-                <select id="midiDevice" class="midi-device-select">
+                <select id="midiDevice">
                     <option value="">Select MIDI Device...</option>
                 </select>
-                <button id="refreshDevices" class="refresh-button">
-                    Refresh Devices
-                </button>
-                <button id="connect" class="connect-button">
-                    Connect
-                </button>
-                <button id="disconnect" class="disconnect-button" disabled>
-                    Disconnect
-                </button>
-                <button id="startRecording" class="record-button" disabled>
-                    Start Recording
-                </button>
-                <button id="stopRecording" class="stop-button" disabled>
-                    Stop Recording
-                </button>
-                <button id="downloadPDF" class="download-button" disabled>
-                    Download PDF
-                </button>
+                <button id="refreshDevices">Refresh Devices</button>
+                <button id="connect" class="primary">Connect</button>
+                <button id="disconnect" disabled>Disconnect</button>
+                <button id="startRecording" disabled>Start Recording</button>
+                <button id="stopRecording" disabled>Stop Recording</button>
+                <button id="downloadPDF" disabled>Download PDF</button>
+                <div class="status">Status: <span id="connectionStatus" class="disconnected">Disconnected</span></div>
             </div>
-            <div class="status-container">
-                Status: <span id="status" class="status disconnected">Disconnected</span>
+
+            <!-- Right Column: Log -->
+            <div class="log-container">
+                <div class="log-tabs">
+                    <div class="log-tab active" data-tab="system">System</div>
+                    <div class="log-tab" data-tab="midi">MIDI Events</div>
+                    <div class="log-tab" data-tab="lilypond">LilyPond</div>
+                </div>
+                <div class="log-section" id="logContent">
+                    <div class="log-entry info">
+                        <span class="log-timestamp">09:56:15</span>
+                        <span>System initialized</span>
+                    </div>
+                    <div class="log-entry">
+                        <span class="log-timestamp">09:56:15</span>
+                        <span>Waiting for MIDI device connection...</span>
+                    </div>
+                </div>
+                <div class="log-controls">
+                    <div class="log-level-filter">
+                        <label><input type="checkbox" checked data-level="info"> Info</label>
+                        <label><input type="checkbox" checked data-level="success"> Success</label>
+                        <label><input type="checkbox" checked data-level="warning"> Warning</label>
+                        <label><input type="checkbox" checked data-level="error"> Error</label>
+                    </div>
+                    <button class="log-clear" id="clearLog">Clear Log</button>
+                </div>
             </div>
         </div>
 
-        <div class="card">
-            <h2>Log</h2>
-            <div class="log-section" id="log">
-                <div class="recording-info">Recording Info</div>
-                <div class="lilypond-code">No LilyPond code generated yet</div>
-                <div class="notes">No notes recorded yet.</div>
-            </div>
-        </div>
-
-        <div class="card">
+        <!-- Recording History -->
+        <div class="recording-history">
             <h2>Recording History</h2>
-            <div class="recording-history" id="recordingHistory">
-                <div class="empty-state">You don't have any recordings yet.</div>
-            </div>
+            <div class="empty-state" id="recordingHistory">You don't have any recordings yet.</div>
         </div>
 
-        <div class="card">
+        <!-- Virtual MIDI Keyboard -->
+        <div class="virtual-keyboard">
             <h2>Virtual MIDI Keyboard</h2>
-            <div class="virtual-keyboard" id="virtualKeyboard">
-                <p>Click the keys to play notes:</p>
-                <!-- Virtual keyboard will be inserted here by JavaScript -->
+            <p>Click the keys to play notes:</p>
+            <div class="piano-keys">
+                <!-- White keys -->
+                <div class="key" data-note="C"><div class="key-label">C</div></div>
+                <div class="key black" data-note="C#"><div class="key-label">C#</div></div>
+                <div class="key" data-note="D"><div class="key-label">D</div></div>
+                <div class="key black" data-note="D#"><div class="key-label">D#</div></div>
+                <div class="key" data-note="E"><div class="key-label">E</div></div>
+                <div class="key" data-note="F"><div class="key-label">F</div></div>
+                <div class="key black" data-note="F#"><div class="key-label">F#</div></div>
+                <div class="key" data-note="G"><div class="key-label">G</div></div>
+                <div class="key black" data-note="G#"><div class="key-label">G#</div></div>
+                <div class="key" data-note="A"><div class="key-label">A</div></div>
+                <div class="key black" data-note="A#"><div class="key-label">A#</div></div>
+                <div class="key" data-note="B"><div class="key-label">B</div></div>
             </div>
         </div>
 
-        <div class="card help-section">
+        <!-- Help Section -->
+        <div class="help-section">
             <h2>Help</h2>
             <h3>Getting Started</h3>
             <ol>
@@ -251,12 +399,8 @@
                 <li>Start recording first to capture the notes</li>
             </ul>
 
-            <div class="simulate-input">
-                <button id="simulateInput" class="simulate-button">
-                    Simulate Input
-                </button>
-                <p>Click "Simulate Input" to generate a C major scale for testing.</p>
-            </div>
+            <button id="simulateInput">Simulate Input</button>
+            <p>Click "Simulate Input" to generate a C major scale for testing.</p>
         </div>
 
         <footer class="footer">
@@ -266,64 +410,194 @@
 
     <script th:src="@{/web-piano/js/piano.js}"></script>
     <script>
-        // Initialize the UI
         document.addEventListener('DOMContentLoaded', function() {
-            const status = document.getElementById('status');
+            // UI Elements
+            const status = document.getElementById('connectionStatus');
             const connectBtn = document.getElementById('connect');
             const disconnectBtn = document.getElementById('disconnect');
             const startRecordingBtn = document.getElementById('startRecording');
             const stopRecordingBtn = document.getElementById('stopRecording');
             const downloadPDFBtn = document.getElementById('downloadPDF');
-            const refreshDevicesBtn = document.getElementById('refreshDevices');
-            const midiDeviceSelect = document.getElementById('midiDevice');
             const simulateInputBtn = document.getElementById('simulateInput');
-            const log = document.getElementById('log');
+            const clearLogBtn = document.getElementById('clearLog');
+            const logContent = document.getElementById('logContent');
+            const recordingHistory = document.getElementById('recordingHistory');
+            
+            // Logging System
+            const logger = {
+                log: function(message, level = '') {
+                    const timestamp = new Date().toLocaleTimeString();
+                    const entry = document.createElement('div');
+                    entry.className = `log-entry ${level}`;
+                    entry.innerHTML = `<span class="log-timestamp">${timestamp}</span><span>${message}</span>`;
+                    logContent.appendChild(entry);
+                    logContent.scrollTop = logContent.scrollHeight;
+                    
+                    // Also log to console for debugging
+                    console.log(`[${level.toUpperCase()}] ${message}`);
+                },
+                info: function(message) {
+                    this.log(message, 'info');
+                },
+                success: function(message) {
+                    this.log(message, 'success');
+                },
+                warning: function(message) {
+                    this.log(message, 'warning');
+                },
+                error: function(message) {
+                    this.log(message, 'error');
+                },
+                clear: function() {
+                    logContent.innerHTML = '';
+                    this.info('Log cleared');
+                }
+            };
+            
+            // Tab switching
+            document.querySelectorAll('.log-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.log-tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    const tabName = tab.dataset.tab;
+                    logger.info(`Switched to ${tabName} log view`);
+                });
+            });
+            
+            // Log filtering
+            document.querySelectorAll('.log-level-filter input').forEach(checkbox => {
+                checkbox.addEventListener('change', () => {
+                    const level = checkbox.dataset.level;
+                    const checked = checkbox.checked;
+                    document.querySelectorAll(`.log-entry.${level}`).forEach(entry => {
+                        entry.style.display = checked ? 'block' : 'none';
+                    });
+                    logger.info(`${checked ? 'Showing' : 'Hiding'} ${level} log messages`);
+                });
+            });
+            
+            // Clear log
+            clearLogBtn.addEventListener('click', () => {
+                logger.clear();
+            });
 
-            // Update status display
+            // Update connection status
             function updateStatus(connected) {
                 status.textContent = connected ? 'Connected' : 'Disconnected';
-                status.className = `status ${connected ? 'connected' : 'disconnected'}`;
+                status.className = connected ? 'connected' : 'disconnected';
                 connectBtn.disabled = connected;
                 disconnectBtn.disabled = !connected;
                 startRecordingBtn.disabled = !connected;
-                stopRecordingBtn.disabled = true;
-                downloadPDFBtn.disabled = true;
+                
+                if (connected) {
+                    logger.success('Connected to MIDI device');
+                } else {
+                    logger.info('Disconnected from MIDI device');
+                }
             }
 
-            // Event listeners
-            connectBtn.addEventListener('click', () => {
-                // Add your connection logic here
-                updateStatus(true);
+            // Piano key interaction
+            document.querySelectorAll('.key').forEach(key => {
+                key.addEventListener('mousedown', () => {
+                    const note = key.dataset.note;
+                    key.style.backgroundColor = key.classList.contains('black') ? '#333' : '#e5e5e5';
+                    logger.info(`Note On: ${note}`);
+                });
+                
+                key.addEventListener('mouseup', () => {
+                    const note = key.dataset.note;
+                    key.style.backgroundColor = key.classList.contains('black') ? '#000' : '#fff';
+                    logger.info(`Note Off: ${note}`);
+                });
+                
+                key.addEventListener('mouseleave', () => {
+                    key.style.backgroundColor = key.classList.contains('black') ? '#000' : '#fff';
+                });
             });
 
+            // Button event listeners
+            connectBtn.addEventListener('click', () => {
+                logger.info('Attempting to connect to MIDI device...');
+                // Simulate connection delay
+                setTimeout(() => updateStatus(true), 500);
+            });
+            
             disconnectBtn.addEventListener('click', () => {
-                // Add your disconnection logic here
                 updateStatus(false);
             });
-
+            
             startRecordingBtn.addEventListener('click', () => {
                 startRecordingBtn.disabled = true;
                 stopRecordingBtn.disabled = false;
-                // Add your recording start logic here
+                logger.success('Recording started');
             });
-
+            
             stopRecordingBtn.addEventListener('click', () => {
                 stopRecordingBtn.disabled = true;
                 downloadPDFBtn.disabled = false;
-                // Add your recording stop logic here
+                logger.success('Recording stopped');
+                logger.info('Processing MIDI data...');
+                setTimeout(() => {
+                    logger.success('MIDI data processed successfully');
+                    
+                    // Update recording history
+                    if (recordingHistory.classList.contains('empty-state')) {
+                        recordingHistory.innerHTML = '';
+                        recordingHistory.classList.remove('empty-state');
+                    }
+                    
+                    const recordingItem = document.createElement('div');
+                    recordingItem.className = 'recording-item';
+                    const timestamp = new Date().toLocaleString();
+                    recordingItem.innerHTML = `Recording ${timestamp} - <a href="#">Download</a>`;
+                    recordingHistory.appendChild(recordingItem);
+                }, 1000);
             });
-
-            refreshDevicesBtn.addEventListener('click', () => {
-                // Add your device refresh logic here
+            
+            downloadPDFBtn.addEventListener('click', () => {
+                logger.info('Generating LilyPond notation...');
+                setTimeout(() => {
+                    logger.info('Compiling PDF...');
+                    setTimeout(() => {
+                        logger.success('PDF generated successfully');
+                    }, 800);
+                }, 800);
             });
-
+            
             simulateInputBtn.addEventListener('click', () => {
-                // Add your simulation logic here
-                log.innerHTML += '\nSimulating C major scale...';
+                logger.info('Simulating C major scale...');
+                
+                const notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'C'];
+                let i = 0;
+                
+                const playNote = () => {
+                    if (i < notes.length) {
+                        const note = notes[i];
+                        logger.info(`Simulated Note On: ${note}`);
+                        
+                        // Find and highlight the key
+                        const key = document.querySelector(`.key[data-note="${note}"]`);
+                        if (key) {
+                            key.style.backgroundColor = key.classList.contains('black') ? '#333' : '#e5e5e5';
+                            setTimeout(() => {
+                                key.style.backgroundColor = key.classList.contains('black') ? '#000' : '#fff';
+                                logger.info(`Simulated Note Off: ${note}`);
+                                i++;
+                                setTimeout(playNote, 300);
+                            }, 300);
+                        } else {
+                            i++;
+                            setTimeout(playNote, 300);
+                        }
+                    }
+                };
+                
+                playNote();
             });
 
-            // Initial status update
-            updateStatus(false);
+            // Initial log entries
+            logger.info('System initialized');
+            logger.info('Waiting for MIDI device connection...');
         });
     </script>
 </body>
