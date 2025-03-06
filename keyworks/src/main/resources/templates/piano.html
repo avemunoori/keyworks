@@ -703,9 +703,9 @@
                 const recording = {
                     id: id,
                     timestamp: timestamp,
-                    pdfUrl: `/output/${id}.pdf`,
-                    midiUrl: `/output/${id}.midi`,
-                    lilypondUrl: `/output/${id}.ly`
+                    pdfUrl: `/api/files/output/${id}.pdf`,
+                    midiUrl: `/api/files/output/${id}.midi`,
+                    lilypondUrl: `/api/files/output/${id}.ly`
                 };
                 
                 // Add to recordings array
@@ -766,28 +766,67 @@
             
             // Open PDF in viewer
             function openPdfViewer(url) {
-                pdfViewerFrame.src = url;
-                pdfViewerContainer.classList.add('visible');
-                viewPDFBtn.disabled = true;
-                logger.info(`Opened PDF viewer for ${url}`);
+                fetch(url)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('PDF not found');
+                        }
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        const pdfUrl = URL.createObjectURL(blob);
+                        pdfViewerFrame.src = pdfUrl;
+                        pdfViewerContainer.classList.add('visible');
+                        viewPDFBtn.disabled = true;
+                        logger.info(`Opened PDF viewer for ${url}`);
+                    })
+                    .catch(error => {
+                        logger.error(`Failed to load PDF: ${error.message}`);
+                    });
             }
             
             // Open PDF in modal
             function openPdfModal(url) {
-                pdfModalFrame.src = url;
-                pdfModal.classList.add('visible');
-                logger.info(`Opened PDF modal for ${url}`);
+                fetch(url)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('PDF not found');
+                        }
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        const pdfUrl = URL.createObjectURL(blob);
+                        pdfModalFrame.src = pdfUrl;
+                        pdfModal.classList.add('visible');
+                        logger.info(`Opened PDF modal for ${url}`);
+                    })
+                    .catch(error => {
+                        logger.error(`Failed to load PDF: ${error.message}`);
+                    });
             }
             
             // Download PDF
             function downloadPdf(url) {
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = url.split('/').pop();
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                logger.success(`Downloaded PDF: ${url}`);
+                fetch(url)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('PDF not found');
+                        }
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        const a = document.createElement('a');
+                        a.href = URL.createObjectURL(blob);
+                        a.download = url.split('/').pop();
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(a.href);
+                        logger.success(`Downloaded PDF: ${url}`);
+                    })
+                    .catch(error => {
+                        logger.error(`Failed to download PDF: ${error.message}`);
+                    });
             }
 
             // Piano key interaction
@@ -856,15 +895,17 @@
             
             viewPDFBtn.addEventListener('click', () => {
                 if (currentRecordingId) {
-                    const pdfUrl = `/output/${currentRecordingId}.pdf`;
+                    const pdfUrl = `/api/files/output/${currentRecordingId}.pdf`;
                     openPdfViewer(pdfUrl);
+                    logger.info(`Opened PDF viewer for /output/${currentRecordingId}.pdf`);
                 }
             });
             
             downloadPDFBtn.addEventListener('click', () => {
                 if (currentRecordingId) {
-                    const pdfUrl = `/output/${currentRecordingId}.pdf`;
+                    const pdfUrl = `/api/files/output/${currentRecordingId}.pdf`;
                     downloadPdf(pdfUrl);
+                    logger.info(`Downloaded PDF: /output/${currentRecordingId}.pdf`);
                 }
             });
             
@@ -875,7 +916,7 @@
             
             downloadPdfFromViewer.addEventListener('click', () => {
                 if (currentRecordingId) {
-                    const pdfUrl = `/output/${currentRecordingId}.pdf`;
+                    const pdfUrl = `/api/files/output/${currentRecordingId}.pdf`;
                     downloadPdf(pdfUrl);
                 }
             });
@@ -933,4 +974,3 @@
     </script>
 </body>
 </html>
-
