@@ -1,376 +1,327 @@
 package com.example.keyworks.controller;
 
-import com.example.keyworks.model.Note;
-import com.example.keyworks.service.MidiDeviceService;
+import com.example.keyworks.config.FileStorageConfig;
+import com.example.keyworks.service.FileService;
 import com.example.keyworks.service.MidiProcessingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import javax.sound.midi.MidiDevice;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
-/**
- * Controller for MIDI-related operations
- */
 @RestController
 @RequestMapping("/api/midi")
 public class MidiController {
-
     private static final Logger logger = LoggerFactory.getLogger(MidiController.class);
-    private final MidiDeviceService midiDeviceService;
+    
     private final MidiProcessingService midiProcessingService;
-
-
-    public MidiController(MidiDeviceService midiDeviceService, MidiProcessingService midiProcessingService) {
-        this.midiDeviceService = midiDeviceService;
+    private final FileService fileService;
+    private final FileStorageConfig fileStorageConfig;
+    
+    public MidiController(MidiProcessingService midiProcessingService, FileService fileService, FileStorageConfig fileStorageConfig) {
         this.midiProcessingService = midiProcessingService;
+        this.fileService = fileService;
+        this.fileStorageConfig = fileStorageConfig;
+        logger.info("MidiController initialized");
     }
-
+    
     /**
-     * List all available MIDI devices
-     * @return List of MIDI device names
+     * Gets a list of available MIDI devices
+     * @return List of MIDI device info objects
      */
     @GetMapping("/devices")
-    public ResponseEntity<List<String>> listMidiDevices() {
-        List<String> devices = midiDeviceService.listMidiDevices();
-        logger.info("Found {} MIDI devices", devices.size());
+    public ResponseEntity<List<Map<String, String>>> getMidiDevices() {
+        List<MidiDevice.Info> deviceInfos = midiProcessingService.getMidiDevices();
+        List<Map<String, String>> devices = new ArrayList<>();
+        
+        for (MidiDevice.Info info : deviceInfos) {
+            Map<String, String> device = new HashMap<>();
+            device.put("name", info.getName());
+            device.put("description", info.getDescription());
+            device.put("vendor", info.getVendor());
+            device.put("version", info.getVersion());
+            device.put("id", UUID.nameUUIDFromBytes(info.getName().getBytes()).toString());
+            devices.add(device);
+        }
+        
         return ResponseEntity.ok(devices);
     }
     
     /**
-     * Process MIDI data and generate sheet music
-     * @param request Map containing recordingId and notes
-     * @return Map with URLs to generated files
+     * Connects to a MIDI device
+     * @param deviceId The ID of the device to connect to
+     * @return Success or failure message
      */
-    @PostMapping("/process")
-    public ResponseEntity<Map<String, String>> processMidiData(@RequestBody Map<String, Object> request) {
-        String recordingId = (String) request.get("recordingId");
-        List<String> notes;
+    @PostMapping("/connect/{deviceId}")
+    public ResponseEntity<Map<String, Object>> connectToDevice(@PathVariable String deviceId) {
+        Map<String, Object> response = new HashMap<>();
         
-        try {
-            notes = (List<String>) request.get("notes");
-        } catch (ClassCastException e) {
-            logger.error("Invalid notes format in request: {}", e.getMessage());
-            notes = new ArrayList<>();
+        List<MidiDevice.Info> deviceInfos = midiProcessingService.getMidiDevices();
+        for (MidiDevice.Info info : deviceInfos) {
+            String id = UUID.nameUUIDFromBytes(info.getName().getBytes()).toString();
+            if (id.equals(deviceId)) {
+                boolean success = midiProcessingService.connectToDevice(info);
+                if (success) {
+                    response.put("success", true);
+                    response.put("message", "Connected to MIDI device: " + info.getName());
+                    return ResponseEntity.ok(response);
+                } else {
+                    response.put("success", false);
+                    response.put("message", "Failed to connect to MIDI device: " + info.getName());
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+                }
+            }
         }
         
-        if (notes == null) {
-            notes = new ArrayList<>();
-        }
-        
-        logger.info("Processing MIDI data for recording ID: {} with {} notes", recordingId, notes.size());
-        
-        // Clear any existing notes
-        midiProcessingService.clearNotes();
-        
-        // Add the notes to the processing service
-        long timestamp = System.currentTimeMillis();
-        for (int i = 0; i < notes.size(); i++) {
-            String noteName = notes.get(i);
-            int midiNote = convertNoteNameToMidi(noteName);
-            int velocity = 64; // Medium velocity
-            long noteTimestamp = timestamp + (i * 500); // 500ms between notes
-            long duration = 400; // 400ms duration
-            
-            midiProcessingService.processNoteOn(midiNote, velocity, noteTimestamp);
-            midiProcessingService.processNoteOff(midiNote, noteTimestamp + duration);
-        }
-        
-        // Generate LilyPond file and compile to PDF using the recording ID
-        String baseFilename = midiProcessingService.generateSheetMusic(recordingId);
-        boolean success = (baseFilename != null);
-        
-        Map<String, String> response = new HashMap<>();
-        if (success) {
-            response.put("success", "true");
-            response.put("recordingId", recordingId);
-            response.put("pdfUrl", "/output/" + baseFilename + ".pdf");
-            response.put("midiUrl", "/output/" + baseFilename + ".midi");
-            response.put("lilypondUrl", "/output/" + baseFilename + ".ly");
-            
-            logger.info("Successfully processed MIDI data. PDF available at: {}", response.get("pdfUrl"));
-            return ResponseEntity.ok(response);
-        } else {
-            response.put("success", "false");
-            response.put("error", "Failed to process MIDI data");
-            
-            logger.error("Failed to process MIDI data for recording ID: {}", recordingId);
-            return ResponseEntity.internalServerError().body(response);
-        }
+        response.put("success", false);
+        response.put("message", "MIDI device not found with ID: " + deviceId);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
     
     /**
-     * Connect to a MIDI device
-     * @param deviceName Name of the MIDI device to connect to
-     * @return Success or failure message
-     */
-    @PostMapping("/connect")
-    public ResponseEntity<Map<String, String>> connectToDevice(@RequestBody Map<String, String> request) {
-        String deviceName = request.get("deviceName");
-        
-        if (deviceName == null || deviceName.isEmpty()) {
-            logger.error("No device name provided for connection");
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", "false",
-                "error", "No device name provided"
-            ));
-        }
-        
-        logger.info("Attempting to connect to MIDI device: {}", deviceName);
-        boolean connected = false;
-        
-        try {
-            String result = midiDeviceService.startListening(deviceName);
-            connected = result != null && !result.isEmpty();
-        } catch (Exception e) {
-            logger.error("Error connecting to device: {}", e.getMessage());
-        }
-        
-        if (connected) {
-            logger.info("Successfully connected to MIDI device: {}", deviceName);
-            return ResponseEntity.ok(Map.of(
-                "success", "true",
-                "message", "Connected to " + deviceName
-            ));
-        } else {
-            logger.error("Failed to connect to MIDI device: {}", deviceName);
-            return ResponseEntity.internalServerError().body(Map.of(
-                "success", "false",
-                "error", "Failed to connect to " + deviceName
-            ));
-        }
-    }
-    
-    /**
-     * Disconnect from the current MIDI device
-     * @return Success or failure message
+     * Disconnects from the current MIDI device
+     * @return Success message
      */
     @PostMapping("/disconnect")
-    public ResponseEntity<Map<String, String>> disconnectDevice() {
-        logger.info("Disconnecting from MIDI device");
-        midiDeviceService.stopAll();
+    public ResponseEntity<Map<String, Object>> disconnectFromDevice() {
+        Map<String, Object> response = new HashMap<>();
         
-        return ResponseEntity.ok(Map.of(
-            "success", "true",
-            "message", "Disconnected from MIDI device"
-        ));
+        midiProcessingService.disconnectFromDevice();
+        
+        response.put("success", true);
+        response.put("message", "Disconnected from MIDI device");
+        return ResponseEntity.ok(response);
     }
     
     /**
-     * Start recording MIDI notes
-     * @return Success or failure message
+     * Starts recording MIDI input
+     * @return The ID of the recording session
      */
     @PostMapping("/record/start")
-    public ResponseEntity<Map<String, String>> startRecording(@RequestBody(required = false) Map<String, String> request) {
-        logger.info("Starting MIDI recording");
-        String deviceName = request != null ? request.get("deviceName") : null;
+    public ResponseEntity<Map<String, Object>> startRecording() {
+        Map<String, Object> response = new HashMap<>();
         
-        try {
-            String recordingId;
-            if (deviceName != null && !deviceName.isEmpty()) {
-                recordingId = midiDeviceService.startRecording(deviceName);
-            } else {
-                // Use the first available device if none specified
-                List<String> devices = midiDeviceService.listMidiDevices();
-                if (devices.isEmpty()) {
-                    return ResponseEntity.internalServerError().body(Map.of(
-                        "success", "false",
-                        "error", "No MIDI devices available"
-                    ));
-                }
-                recordingId = midiDeviceService.startRecording(devices.get(0));
-            }
-            
-            // Start recording in the processing service
-            midiProcessingService.startRecording();
-            
-            logger.info("MIDI recording started successfully with ID: {}", recordingId);
-            return ResponseEntity.ok(Map.of(
-                "success", "true",
-                "message", "Recording started",
-                "recordingId", recordingId
-            ));
-        } catch (Exception e) {
-            logger.error("Failed to start MIDI recording: {}", e.getMessage());
-            return ResponseEntity.internalServerError().body(Map.of(
-                "success", "false",
-                "error", "Failed to start recording: " + e.getMessage()
-            ));
+        String recordingId = midiProcessingService.startRecording();
+        if (recordingId != null) {
+            response.put("success", true);
+            response.put("recordingId", recordingId);
+            response.put("message", "Recording started");
+            return ResponseEntity.ok(response);
+        } else {
+            response.put("success", false);
+            response.put("message", "Failed to start recording. Make sure a MIDI device is connected.");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
     }
     
     /**
-     * Stop recording MIDI notes and return the recorded notes
-     * @return Recording data including processed files
+     * Stops the current recording session
+     * @return The list of recorded notes
      */
     @PostMapping("/record/stop")
     public ResponseEntity<Map<String, Object>> stopRecording() {
-        logger.info("Stopping MIDI recording");
+        Map<String, Object> response = new HashMap<>();
+        
+        List<String> notes = midiProcessingService.stopRecording();
+        
+        response.put("success", true);
+        response.put("message", "Recording stopped");
+        response.put("notes", notes);
+        response.put("count", notes.size());
+        response.put("recordingId", midiProcessingService.getCurrentRecordingId());
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * Simulates playing a C major scale
+     * @return Success message
+     */
+    @PostMapping("/simulate/scale")
+    public ResponseEntity<Map<String, Object>> simulateCMajorScale() {
+        Map<String, Object> response = new HashMap<>();
+        
+        if (!midiProcessingService.isRecording()) {
+            response.put("success", false);
+            response.put("message", "Please start recording first");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+        
+        midiProcessingService.simulateCMajorScale();
+        
+        response.put("success", true);
+        response.put("message", "C major scale simulated");
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * Generates a PDF from the recorded notes
+     * @return The URL to access the generated PDF
+     */
+    @PostMapping("/generate/pdf")
+    public ResponseEntity<Map<String, Object>> generatePDF() {
+        Map<String, Object> response = new HashMap<>();
         
         try {
-            // Get the recording data from the service
-            Map<String, Object> recordingData = midiDeviceService.stopRecording();
-            
-            // Stop recording in the processing service
-            midiProcessingService.stopRecording();
-            
-            // Create response with success status
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", "true");
-            response.put("message", "Recording stopped");
-            
-            // Add recording data to response
-            if (recordingData != null) {
-                String recordingId = (String) recordingData.get("id");
-                response.put("recordingId", recordingId);
-                response.put("noteCount", recordingData.get("noteCount"));
-                response.put("duration", recordingData.get("duration"));
-                response.put("lilyPondCode", recordingData.get("lilyPondCode"));
-                
-                // Generate sheet music using the recording ID as the filename
-                String baseFilename = midiProcessingService.generateSheetMusic(recordingId);
-                
-                if (baseFilename != null) {
-                    response.put("pdfUrl", "/output/" + baseFilename + ".pdf");
-                    response.put("midiUrl", "/output/" + baseFilename + ".midi");
-                    response.put("lilypondUrl", "/output/" + baseFilename + ".ly");
-                }
-            }
-            
-            logger.info("MIDI recording stopped and processed");
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            logger.error("Error stopping recording: {}", e.getMessage());
-            return ResponseEntity.internalServerError().body(Map.of(
-                "success", "false",
-                "error", "Failed to stop recording: " + e.getMessage()
-            ));
-        }
-    }
-    
-    /**
-     * Simulate a MIDI note event
-     * @param request Map containing note and velocity
-     * @return Success or failure message
-     */
-    @PostMapping("/simulate")
-    public ResponseEntity<Map<String, String>> simulateNote(@RequestBody Map<String, Object> request) {
-        String note = (String) request.get("note");
-        Integer velocity = (Integer) request.get("velocity");
-        Boolean noteOn = (Boolean) request.get("noteOn");
-        
-        if (note == null || velocity == null || noteOn == null) {
-            logger.error("Invalid parameters for note simulation");
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", "false",
-                "error", "Missing required parameters"
-            ));
-        }
-        
-        logger.info("Simulating MIDI note: {} (velocity: {}, on: {})", note, velocity, noteOn);
-        midiDeviceService.simulateNote(note, velocity, noteOn);
-        
-        // Also process the note in the MidiProcessingService if recording
-        if (midiProcessingService.isRecording()) {
-            int midiNote = convertNoteNameToMidi(note);
-            long timestamp = System.currentTimeMillis();
-            
-            if (noteOn) {
-                midiProcessingService.processNoteOn(midiNote, velocity, timestamp);
+            String pdfPath = midiProcessingService.generatePDFFromRecording();
+            if (pdfPath != null) {
+                response.put("success", true);
+                response.put("message", "PDF generated successfully");
+                response.put("pdfUrl", "/api/files/output/" + pdfPath);
+                response.put("recordingId", midiProcessingService.getCurrentRecordingId());
+                return ResponseEntity.ok(response);
             } else {
-                midiProcessingService.processNoteOff(midiNote, timestamp);
+                response.put("success", false);
+                response.put("message", "Failed to generate PDF. No notes recorded.");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
             }
+        } catch (Exception e) {
+            logger.error("Error generating PDF: {}", e.getMessage(), e);
+            response.put("success", false);
+            response.put("message", "Error generating PDF: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
-        
-        return ResponseEntity.ok(Map.of(
-            "success", "true",
-            "message", "Note simulated: " + note
-        ));
     }
     
     /**
-     * Get the status of the MIDI device connection
-     * @return Connection status
+     * Tests PDF generation with a simple scale
+     * @return The URL to access the generated PDF
+     */
+    @PostMapping("/test/pdf/{id}")
+    public ResponseEntity<Map<String, Object>> testPdfGeneration(@PathVariable String id) {
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            String pdfPath = midiProcessingService.testPdfGeneration(id);
+            if (pdfPath != null) {
+                response.put("success", true);
+                response.put("message", "PDF test generation completed");
+                response.put("pdfUrl", "/api/files/output/" + pdfPath);
+                response.put("testId", id);
+                return ResponseEntity.ok(response);
+            } else {
+                response.put("success", false);
+                response.put("message", "Failed to generate test PDF");
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            }
+        } catch (Exception e) {
+            logger.error("Error in test PDF generation: {}", e.getMessage(), e);
+            response.put("success", false);
+            response.put("message", "Error in test PDF generation: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Gets the current recording status
+     * @return The recording status
      */
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> getStatus() {
-        boolean connected = midiDeviceService.isConnected();
-        boolean recording = midiDeviceService.isRecording();
-        String currentDevice = midiDeviceService.getCurrentDevice();
+        Map<String, Object> response = new HashMap<>();
         
-        Map<String, Object> status = new HashMap<>();
-        status.put("connected", connected);
-        status.put("recording", recording);
-        status.put("currentDevice", currentDevice != null ? currentDevice : "");
+        response.put("isRecording", midiProcessingService.isRecording());
+        response.put("recordingId", midiProcessingService.getCurrentRecordingId());
+        response.put("noteCount", midiProcessingService.getRecordedNotes().size());
         
-        logger.info("MIDI status: connected={}, recording={}, device={}", 
-                    connected, recording, currentDevice);
-        return ResponseEntity.ok(status);
+        return ResponseEntity.ok(response);
     }
     
     /**
-     * Convert MIDI note number to note name
-     * @param noteNumber MIDI note number
-     * @return Note name (e.g., "C4")
+     * Gets the recorded notes
+     * @return The list of recorded notes
      */
-    private String convertMidiNoteToName(int noteNumber) {
-        String[] noteNames = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-        int octave = (noteNumber / 12) - 1;
-        int note = noteNumber % 12;
-        return noteNames[note] + octave;
+    @GetMapping("/notes")
+    public ResponseEntity<Map<String, Object>> getRecordedNotes() {
+        Map<String, Object> response = new HashMap<>();
+        
+        List<String> notes = midiProcessingService.getRecordedNotes();
+        
+        response.put("notes", notes);
+        response.put("count", notes.size());
+        response.put("recordingId", midiProcessingService.getCurrentRecordingId());
+        
+        return ResponseEntity.ok(response);
     }
     
     /**
-     * Convert note name to MIDI note number
-     * @param noteName Note name (e.g., "C4")
-     * @return MIDI note number
+     * Downloads the generated PDF
+     * @param recordingId The ID of the recording
+     * @return The PDF file
      */
-    private int convertNoteNameToMidi(String noteName) {
-        if (noteName == null || noteName.length() < 2) {
-            return 60; // Default to middle C
-        }
-        
-        // Define the mapping of note names to their values using HashMap
-        Map<String, Integer> noteMap = new HashMap<>();
-        noteMap.put("C", 0);
-        noteMap.put("C#", 1);
-        noteMap.put("Db", 1);
-        noteMap.put("D", 2);
-        noteMap.put("D#", 3);
-        noteMap.put("Eb", 3);
-        noteMap.put("E", 4);
-        noteMap.put("F", 5);
-        noteMap.put("F#", 6);
-        noteMap.put("Gb", 6);
-        noteMap.put("G", 7);
-        noteMap.put("G#", 8);
-        noteMap.put("Ab", 8);
-        noteMap.put("A", 9);
-        noteMap.put("A#", 10);
-        noteMap.put("Bb", 10);
-        noteMap.put("B", 11);
-        
-        // Extract note and octave
-        String note = noteName.substring(0, noteName.length() - 1);
-        int octave;
+    @GetMapping("/download/pdf/{recordingId}")
+    public ResponseEntity<Resource> downloadPdf(@PathVariable String recordingId) {
         try {
-            octave = Integer.parseInt(noteName.substring(noteName.length() - 1));
-        } catch (NumberFormatException e) {
-            octave = 4; // Default to middle octave
+            String pdfFileName = "music_generated_" + recordingId + ".pdf";
+            Resource resource = fileService.loadFileAsResource(pdfFileName);
+            
+            // Check if the file exists
+            if (!resource.exists()) {
+                logger.error("PDF not found for recording ID: {}", recordingId);
+                return ResponseEntity.notFound().build();
+            }
+            
+            // Determine content type
+            String contentType;
+            try {
+                Path path = fileStorageConfig.resolveFilePath(pdfFileName);
+                contentType = Files.probeContentType(path);
+            } catch (IOException e) {
+                contentType = "application/pdf";
+            }
+            
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + resource.getFilename() + "\"")
+                    .body(resource);
+        } catch (Exception e) {
+            logger.error("Failed to download PDF: {}", e.getMessage(), e);
+            return ResponseEntity.notFound().build();
         }
-        
-        // Calculate MIDI note number
-        Integer noteValue = noteMap.get(note);
-        if (noteValue == null) {
-            return 60; // Default to middle C
+    }
+    
+    /**
+     * Views the generated PDF
+     * @param recordingId The ID of the recording
+     * @return The PDF file for viewing
+     */
+    @GetMapping("/view/pdf/{recordingId}")
+    public ResponseEntity<Resource> viewPdf(@PathVariable String recordingId) {
+        try {
+            String pdfFileName = "music_generated_" + recordingId + ".pdf";
+            Resource resource = fileService.loadFileAsResource(pdfFileName);
+            
+            // Check if the file exists
+            if (!resource.exists()) {
+                logger.error("PDF not found for recording ID: {}", recordingId);
+                return ResponseEntity.notFound().build();
+            }
+            
+            // Determine content type
+            String contentType;
+            try {
+                Path path = fileStorageConfig.resolveFilePath(pdfFileName);
+                contentType = Files.probeContentType(path);
+            } catch (IOException e) {
+                contentType = "application/pdf";
+            }
+            
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + resource.getFilename() + "\"")
+                    .body(resource);
+        } catch (Exception e) {
+            logger.error("Failed to view PDF: {}", e.getMessage(), e);
+            return ResponseEntity.notFound().build();
         }
-        
-        return (octave + 1) * 12 + noteValue;
     }
 }

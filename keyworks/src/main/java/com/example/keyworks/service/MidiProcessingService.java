@@ -1,38 +1,49 @@
 package com.example.keyworks.service;
 
-import com.example.keyworks.model.Note;
+import com.example.keyworks.config.FileStorageConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.sound.midi.*;
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 @Service
 public class MidiProcessingService {
-
     private static final Logger logger = LoggerFactory.getLogger(MidiProcessingService.class);
-    private final Queue<Note> noteQueue = new ConcurrentLinkedQueue<>();
-    private final MidiDeviceService midiDeviceService;
-    private Path outputDir;
+    
+    private final FileStorageConfig fileStorageConfig;
+    private final LilyPondService lilyPondService;
+    
+    // MIDI device management
+    private Receiver midiReceiver;
+    private Transmitter midiTransmitter;
+    private MidiDevice currentDevice;
     private boolean isRecording = false;
-    private long recordingStartTime;
-
-   
-    public MidiProcessingService(MidiDeviceService midiDeviceService, 
-                                @Value("${app.output.directory:./output}") String outputDirectory) {
-        this.midiDeviceService = midiDeviceService;
-        this.outputDir = Paths.get(outputDirectory).toAbsolutePath();
+    private List<MidiEvent> recordedEvents = new CopyOnWriteArrayList<>();
+    private long startTime;
+    private String currentRecordingId;
+    
+    // Note tracking
+    private final Map<Integer, Long> activeNotes = new ConcurrentHashMap<>();
+    private final List<String> recordedNotes = new CopyOnWriteArrayList<>();
+    
+    // Note name mapping
+    private static final String[] NOTE_NAMES = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+    
+    public MidiProcessingService(FileStorageConfig fileStorageConfig, LilyPondService lilyPondService) {
+        this.fileStorageConfig = fileStorageConfig;
+        this.lilyPondService = lilyPondService;
         
-        // Create output directory if it doesn't exist
+        // Ensure output directory exists
+        Path outputDir = fileStorageConfig.getOutputDirectoryPath();
         try {
             Files.createDirectories(outputDir);
             logger.info("Output directory created/verified at: {}", outputDir);
@@ -40,314 +51,461 @@ public class MidiProcessingService {
             logger.error("Failed to create output directory: {}", e.getMessage());
         }
     }
-
-    public void startRecording() {
-        clearNotes();
-        isRecording = true;
-        recordingStartTime = System.currentTimeMillis();
-        logger.info("Recording started at {}", recordingStartTime);
-    }
-
-    public void stopRecording() {
-        isRecording = false;
-        logger.info("Recording stopped. Captured {} notes", noteQueue.size());
-    }
-
-    public boolean isRecording() {
-        return isRecording;
-    }
-
-    public void processNoteOn(int note, int velocity, long timestamp) {
-        Note newNote = new Note(note, velocity, timestamp, 0);
-        noteQueue.add(newNote);
-        logger.debug("Note ON added to queue: {}", newNote);
-    }
-
-    public void processNoteOff(int note, long timestamp) {
-        // Find the matching note-on event
-        for (Note queuedNote : noteQueue) {
-            if (queuedNote.getNoteNumber() == note && queuedNote.getDuration() == 0) {
-                queuedNote.setDuration(timestamp - queuedNote.getTimestamp());
-                logger.debug("Note OFF processed: {}", queuedNote);
-                break;
-            }
-        }
-    }
-
-    public List<Note> getAllNotes() {
-        List<Note> notes = new ArrayList<>(noteQueue);
-        return notes;
-    }
-
-    public void clearNotes() {
-        noteQueue.clear();
-        logger.info("Note queue cleared");
-    }
-
-    // Original method for backward compatibility
-    public String generateLilyPondFile() {
-        return generateLilyPondFile(null);
-    }
-
-    // New method with custom filename support
-    public String generateLilyPondFile(String customFilename) {
-        if (noteQueue.isEmpty()) {
-            logger.warn("No notes to process");
-            return null;
-        }
-
-        // Use custom filename if provided, otherwise use timestamp
-        String filename;
-        if (customFilename != null && !customFilename.isEmpty()) {
-            filename = customFilename + ".ly";
-        } else {
-            // Create a timestamp for the filename
-            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-            filename = "keyworks_" + timestamp + ".ly";
-        }
-        
-        Path filePath = outputDir.resolve(filename);
-
-        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
-            // Write LilyPond header
-            writer.write("\\version \"2.20.0\"\n");
-            writer.write("\\score {\n");
-            writer.write("  \\new Staff {\n");
-            writer.write("    \\clef treble\n");
-            writer.write("    \\time 4/4\n");
-            writer.write("    \\tempo 4 = 120\n");
-            writer.write("    \\relative c' {\n");
-
-            // Sort notes by timestamp
-            List<Note> sortedNotes = new ArrayList<>(noteQueue);
-            sortedNotes.sort(Comparator.comparing(Note::getTimestamp));
-
-            // Convert MIDI notes to LilyPond notation
-            for (Note note : sortedNotes) {
-                if (note.getDuration() > 0) {  // Only process notes with duration
-                    String lilyNote = convertMidiNoteToLilyPond(note);
-                    writer.write("      " + lilyNote + "\n");
-                }
-            }
-
-            // Close LilyPond score
-            writer.write("    }\n");
-            writer.write("  }\n");
-            writer.write("  \\layout { }\n");
-            writer.write("  \\midi { }\n");
-            writer.write("}\n");
-
-            logger.info("LilyPond file generated: {}", filePath);
-            
-            // Compile to PDF
-            String lilypondFilePath = filePath.toString();
-            boolean compiled = compileLilyPondToPdf(lilypondFilePath);
-            
-            if (compiled) {
-                // Return the base filename without extension
-                return filename.substring(0, filename.lastIndexOf('.'));
-            } else {
-                logger.error("Failed to compile LilyPond file to PDF");
-                return null;
-            }
-            
-        } catch (IOException e) {
-            logger.error("Error generating LilyPond file: {}", e.getMessage());
-            return null;
-        }
-    }
-
-    private String convertMidiNoteToLilyPond(Note note) {
-        // MIDI note numbers: C4 (middle C) = 60
-        String[] noteNames = {"c", "cis", "d", "dis", "e", "f", "fis", "g", "gis", "a", "ais", "b"};
-        int noteNumber = note.getNoteNumber();
-        
-        // Calculate octave and note name
-        int octave = (noteNumber / 12) - 1;
-        String noteName = noteNames[noteNumber % 12];
-        
-        // Calculate duration (simplified)
-        // This is a basic approximation - you might need more sophisticated logic
-        long durationMs = note.getDuration();
-        String durationStr = "4";  // Default to quarter note
-        
-        if (durationMs < 200) {
-            durationStr = "16";  // Sixteenth note
-        } else if (durationMs < 400) {
-            durationStr = "8";   // Eighth note
-        } else if (durationMs < 800) {
-            durationStr = "4";   // Quarter note
-        } else if (durationMs < 1600) {
-            durationStr = "2";   // Half note
-        } else {
-            durationStr = "1";   // Whole note
-        }
-        
-        // Build LilyPond notation
-        StringBuilder lilyNote = new StringBuilder(noteName);
-        
-        // Add octave markers
-        int relativeToMiddleC = octave - 4;  // Middle C is C4
-        if (relativeToMiddleC > 0) {
-            lilyNote.append("'".repeat(relativeToMiddleC));
-        } else if (relativeToMiddleC < 0) {
-            lilyNote.append(",".repeat(Math.abs(relativeToMiddleC)));
-        }
-        
-        // Add duration
-        lilyNote.append(durationStr);
-        
-        return lilyNote.toString();
-    }
-
-    private boolean compileLilyPondToPdf(String lilypondFilePath) {
-        logger.info("Compiling LilyPond file to PDF: {}", lilypondFilePath);
+    
+    /**
+     * Gets a list of available MIDI devices
+     * @return List of MIDI device info objects
+     */
+    public List<MidiDevice.Info> getMidiDevices() {
+        logger.info("Fetching MIDI devices...");
+        List<MidiDevice.Info> deviceInfos = new ArrayList<>();
         
         try {
-            // Get just the filename from the path
-            Path lilypondFile = Paths.get(lilypondFilePath);
-            String filename = lilypondFile.getFileName().toString();
-            
-            // Create a process to run LilyPond
-            ProcessBuilder processBuilder = new ProcessBuilder(
-                "lilypond", 
-                "--output=" + outputDir.toAbsolutePath(), 
-                filename  // Just use the filename since we're already in the output directory
-            );
-            
-            // Redirect error stream to output stream
-            processBuilder.redirectErrorStream(true);
-            
-            // Set working directory to output directory
-            processBuilder.directory(outputDir.toFile());
-            
-            // Start the process
-            Process process = processBuilder.start();
-            
-            // Capture and log the output
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    logger.debug("LilyPond: {}", line);
+            MidiDevice.Info[] infos = MidiSystem.getMidiDeviceInfo();
+            for (MidiDevice.Info info : infos) {
+                try {
+                    MidiDevice device = MidiSystem.getMidiDevice(info);
+                    // Only include devices that can transmit MIDI data
+                    if (device.getMaxTransmitters() != 0) {
+                        deviceInfos.add(info);
+                    }
+                } catch (MidiUnavailableException e) {
+                    logger.warn("MIDI device unavailable: {}", info.getName());
                 }
             }
+            logger.info("Found {} MIDI devices", deviceInfos.size());
+        } catch (Exception e) {
+            logger.error("Error getting MIDI devices: {}", e.getMessage());
+        }
+        
+        return deviceInfos;
+    }
+    
+    /**
+     * Connects to a MIDI device
+     * @param deviceInfo The MIDI device info
+     * @return True if connection was successful
+     */
+    public boolean connectToDevice(MidiDevice.Info deviceInfo) {
+        try {
+            logger.info("Connecting to MIDI device: {}...", deviceInfo.getName());
             
-            // Wait for the process to complete
-            int exitCode = process.waitFor();
+            // Close any existing connection
+            disconnectFromDevice();
             
-            if (exitCode == 0) {
-                logger.info("LilyPond compilation successful");
-                return true;
-            } else {
-                logger.error("LilyPond compilation failed with exit code: {}", exitCode);
-                return false;
+            // Open the new device
+            MidiDevice device = MidiSystem.getMidiDevice(deviceInfo);
+            if (!device.isOpen()) {
+                device.open();
             }
             
-        } catch (IOException | InterruptedException e) {
-            logger.error("Error compiling LilyPond file: {}", e.getMessage());
+            // Set up the MIDI receiver
+            midiReceiver = new MidiInputReceiver();
+            
+            // Get a transmitter from the device
+            midiTransmitter = device.getTransmitter();
+            midiTransmitter.setReceiver(midiReceiver);
+            
+            currentDevice = device;
+            logger.info("Connected to MIDI device");
+            return true;
+        } catch (MidiUnavailableException e) {
+            logger.error("Failed to connect to MIDI device: {}", e.getMessage());
             return false;
         }
     }
-
-    public String getOutputDirectory() {
-        return outputDir.toString();
-    }
-
-    public void exportMidiFile(String filename) {
-        if (noteQueue.isEmpty()) {
-            logger.warn("No notes to export to MIDI");
-            return;
-        }
-
+    
+    /**
+     * Disconnects from the current MIDI device
+     */
+    public void disconnectFromDevice() {
         try {
-            // Create a sequence with PPQ division type and resolution of 480 ticks per beat
-            Sequence sequence = new Sequence(Sequence.PPQ, 480);
-            
-            // Create a track
-            Track track = sequence.createTrack();
-            
-            // Add a program change message to set the instrument (piano = 0)
-            ShortMessage programChange = new ShortMessage();
-            programChange.setMessage(ShortMessage.PROGRAM_CHANGE, 0, 0, 0);
-            track.add(new MidiEvent(programChange, 0));
-            
-            // Sort notes by timestamp
-            List<Note> sortedNotes = new ArrayList<>(noteQueue);
-            sortedNotes.sort(Comparator.comparing(Note::getTimestamp));
-            
-            // Calculate the first timestamp to normalize all times
-            long firstTimestamp = sortedNotes.isEmpty() ? 0 : sortedNotes.get(0).getTimestamp();
-            
-            // Add note events to the track
-            for (Note note : sortedNotes) {
-                if (note.getDuration() > 0) {
-                    // Calculate tick positions
-                    long startTick = (note.getTimestamp() - firstTimestamp) / 2; // Convert ms to ticks (simplified)
-                    long endTick = startTick + (note.getDuration() / 2);
-                    
-                    // Note On
-                    ShortMessage noteOn = new ShortMessage();
-                    noteOn.setMessage(ShortMessage.NOTE_ON, 0, note.getNoteNumber(), note.getVelocity());
-                    track.add(new MidiEvent(noteOn, startTick));
-                    
-                    // Note Off
-                    ShortMessage noteOff = new ShortMessage();
-                    noteOff.setMessage(ShortMessage.NOTE_OFF, 0, note.getNoteNumber(), 0);
-                    track.add(new MidiEvent(noteOff, endTick));
-                }
+            if (isRecording) {
+                stopRecording();
             }
             
-            // Write the MIDI sequence to a file
-            Path midiFilePath = outputDir.resolve(filename + ".mid");
-            MidiSystem.write(sequence, 1, midiFilePath.toFile());
+            if (midiTransmitter != null) {
+                midiTransmitter.close();
+                midiTransmitter = null;
+            }
             
-            logger.info("MIDI file exported to: {}", midiFilePath);
+            if (midiReceiver != null) {
+                midiReceiver.close();
+                midiReceiver = null;
+            }
             
+            if (currentDevice != null && currentDevice.isOpen()) {
+                currentDevice.close();
+                currentDevice = null;
+            }
+            
+            logger.info("Disconnected from MIDI device");
         } catch (Exception e) {
-            logger.error("Error exporting MIDI file: {}", e.getMessage());
+            logger.error("Error disconnecting from MIDI device: {}", e.getMessage());
         }
     }
-
-    public void handleMidiMessage(MidiMessage message, long timestamp) {
+    
+    /**
+     * Starts recording MIDI input
+     * @return The ID of the recording session
+     */
+    public String startRecording() {
+        if (midiReceiver == null) {
+            logger.warn("Cannot start recording: No MIDI device connected");
+            return null;
+        }
+        
+        logger.info("Starting recording...");
+        isRecording = true;
+        recordedEvents.clear();
+        recordedNotes.clear();
+        activeNotes.clear();
+        startTime = System.currentTimeMillis();
+        
+        // Generate a unique ID for this recording
+        currentRecordingId = UUID.randomUUID().toString();
+        logger.info("Recording started with ID: {}", currentRecordingId);
+        
+        return currentRecordingId;
+    }
+    
+    /**
+     * Stops the current recording session
+     * @return The list of recorded notes
+     */
+    public List<String> stopRecording() {
         if (!isRecording) {
+            logger.warn("Cannot stop recording: Not currently recording");
+            return Collections.emptyList();
+        }
+        
+        logger.info("Stopping recording...");
+        isRecording = false;
+        
+        // Calculate duration
+        long duration = System.currentTimeMillis() - startTime;
+        
+        logger.info("Recording stopped and processed");
+        logger.info("Notes recorded: {}", recordedNotes.size());
+        logger.info("Duration: {} seconds", duration / 1000.0);
+        
+        return new ArrayList<>(recordedNotes);
+    }
+    
+    /**
+     * Simulates playing a C major scale
+     */
+    public void simulateCMajorScale() {
+        if (!isRecording) {
+            logger.warn("Please start recording first");
             return;
         }
         
-        // Only process ShortMessage types (which include note on/off)
-        if (message instanceof ShortMessage) {
-            ShortMessage sm = (ShortMessage) message;
-            int command = sm.getCommand();
-            int note = sm.getData1();
-            int velocity = sm.getData2();
-            
-            // Calculate relative timestamp
-            long relativeTime = timestamp - recordingStartTime;
-            
-            if (command == ShortMessage.NOTE_ON && velocity > 0) {
-                processNoteOn(note, velocity, relativeTime);
-            } else if (command == ShortMessage.NOTE_OFF || (command == ShortMessage.NOTE_ON && velocity == 0)) {
-                processNoteOff(note, relativeTime);
+        logger.info("Simulating C major scale...");
+        
+        // C major scale notes
+        String[] notes = {"C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"};
+        
+        try {
+            for (String note : notes) {
+                // Convert note name to MIDI note number
+                int noteNumber = noteNameToMidiNumber(note);
+                
+                // Simulate note on
+                logger.info("Simulated Note On: {}", note);
+                processNoteOn(noteNumber, 64);
+                Thread.sleep(500);
+                
+                // Simulate note off
+                logger.info("Simulated Note Off: {}", note);
+                processNoteOff(noteNumber);
+                Thread.sleep(100);
             }
+        } catch (InterruptedException e) {
+            logger.error("Simulation interrupted: {}", e.getMessage());
+            Thread.currentThread().interrupt();
         }
-    }
-
-    // Original method for backward compatibility
-    public String generateSheetMusic() {
-        return generateSheetMusic(null);
-    }
-
-    // New method with custom filename support
-    public String generateSheetMusic(String customFilename) {
-        String baseFilename = generateLilyPondFile(customFilename);
-        if (baseFilename != null) {
-            exportMidiFile(baseFilename);
-            return baseFilename;
-        }
-        return null;
     }
     
-    // Method to get the path to a PDF file
-    public Path getPdfPath(String baseFilename) {
-        return outputDir.resolve(baseFilename + ".pdf");
+    /**
+     * Generates a PDF from the recorded notes
+     * @return The path to the generated PDF file
+     */
+    public String generatePDFFromRecording() {
+        if (recordedNotes.isEmpty()) {
+            logger.warn("No notes recorded to generate PDF");
+            return null;
+        }
+        
+        return generatePDF(recordedNotes, currentRecordingId);
+    }
+    
+    /**
+     * Generates a PDF from a list of notes
+     * @param notes The list of notes
+     * @param id The ID to use for the generated files
+     * @return The path to the generated PDF file
+     */
+    public String generatePDF(List<String> notes, String id) {
+        try {
+            // Generate LilyPond code from notes
+            String lilyPondCode = generateLilyPondCode(notes);
+            
+            // Use LilyPondService to generate PDF
+            Map<String, String> generatedFiles = lilyPondService.generateFiles(lilyPondCode, id);
+            
+            if (!generatedFiles.containsKey("pdf")) {
+                logger.error("PDF generation failed: No PDF file returned");
+                throw new RuntimeException("PDF generation failed");
+            }
+            
+            String pdfPath = generatedFiles.get("pdf");
+            
+            // Get the full path to the PDF file
+            Path fullPath = fileStorageConfig.resolveFilePath(pdfPath);
+            
+            // Check if the file exists
+            boolean fileExists = Files.exists(fullPath);
+            
+            logger.info("PDF generated successfully! PDF Path: {} Output Directory: {} Access URL: /api/files/output/{}", 
+                    fullPath, fileStorageConfig.getOutputDirectory(), pdfPath);
+            
+            logger.info("Checking file: {} File exists: {}", fullPath, fileExists);
+            
+            if (!fileExists) {
+                logger.error("PDF file not found at expected path: {}", fullPath);
+                
+                // Try to find the file by listing the directory
+                File outputDir = fileStorageConfig.getOutputDirectoryPath().toFile();
+                File[] pdfFiles = outputDir.listFiles((dir, name) -> name.endsWith(".pdf") && name.contains(id));
+                
+                if (pdfFiles != null && pdfFiles.length > 0) {
+                    logger.info("Found PDF file at alternative location: {}", pdfFiles[0].getPath());
+                    return pdfFiles[0].getName();
+                } else {
+                    logger.error("No PDF file found with ID: {}", id);
+                    throw new RuntimeException("PDF generation failed");
+                }
+            }
+            
+            return pdfPath;
+        } catch (Exception e) {
+            logger.error("Error generating PDF: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to generate PDF", e);
+        }
+    }
+    
+    /**
+     * Generates LilyPond code from a list of notes
+     * @param notes The list of notes
+     * @return The generated LilyPond code
+     */
+    private String generateLilyPondCode(List<String> notes) {
+        StringBuilder lilyPondCode = new StringBuilder();
+        
+        // Add LilyPond header
+        lilyPondCode.append("\\version \"2.20.0\"\n");
+        lilyPondCode.append("\\score {\n");
+        lilyPondCode.append("  \\new Staff {\n");
+        lilyPondCode.append("    \\clef treble\n");
+        lilyPondCode.append("    \\time 4/4\n");
+        lilyPondCode.append("    \\tempo 4 = 120\n");
+        
+        // Add notes
+        lilyPondCode.append("    ");
+        for (String note : notes) {
+            // Convert MIDI note name to LilyPond format
+            String lilyNote = convertToLilyPondNote(note);
+            lilyPondCode.append(lilyNote).append(" ");
+        }
+        lilyPondCode.append("\n");
+        
+        // Close LilyPond code
+        lilyPondCode.append("  }\n");
+        lilyPondCode.append("  \\layout { }\n");
+        lilyPondCode.append("  \\midi { }\n");
+        lilyPondCode.append("}\n");
+        
+        return lilyPondCode.toString();
+    }
+    
+    /**
+     * Converts a MIDI note name to LilyPond format
+     * @param midiNote The MIDI note name (e.g., "C4")
+     * @return The LilyPond note name
+     */
+    private String convertToLilyPondNote(String midiNote) {
+        if (midiNote == null || midiNote.length() < 2) {
+            return "c'";
+        }
+        
+        // Extract note name and octave
+        String noteName = midiNote.substring(0, midiNote.length() - 1).toLowerCase();
+        int octave = Integer.parseInt(midiNote.substring(midiNote.length() - 1));
+        
+        // Convert sharp/flat notation
+        if (noteName.contains("#")) {
+            noteName = noteName.replace("#", "is");
+        } else if (noteName.contains("b")) {
+            noteName = noteName.replace("b", "es");
+        }
+        
+        // Add octave markers
+        StringBuilder lilyNote = new StringBuilder(noteName);
+        
+        // Middle C (C4) in LilyPond is c'
+        if (octave == 4) {
+            lilyNote.append("'");
+        } else if (octave > 4) {
+            for (int i = 0; i < octave - 4; i++) {
+                lilyNote.append("'");
+            }
+        } else if (octave < 4) {
+            for (int i = 0; i < 4 - octave; i++) {
+                lilyNote.append(",");
+            }
+        }
+        
+        return lilyNote.toString();
+    }
+    
+    /**
+     * Converts a MIDI note number to a note name
+     * @param noteNumber The MIDI note number
+     * @return The note name (e.g., "C4")
+     */
+    private String midiNumberToNoteName(int noteNumber) {
+        int octave = (noteNumber / 12) - 1;
+        int note = noteNumber % 12;
+        return NOTE_NAMES[note] + octave;
+    }
+    
+    /**
+     * Converts a note name to a MIDI note number
+     * @param noteName The note name (e.g., "C4")
+     * @return The MIDI note number
+     */
+    private int noteNameToMidiNumber(String noteName) {
+        if (noteName == null || noteName.length() < 2) {
+            return 60; // Middle C
+        }
+        
+        String note = noteName.substring(0, noteName.length() - 1);
+        int octave = Integer.parseInt(noteName.substring(noteName.length() - 1));
+        
+        int noteIndex = -1;
+        for (int i = 0; i < NOTE_NAMES.length; i++) {
+            if (NOTE_NAMES[i].equalsIgnoreCase(note)) {
+                noteIndex = i;
+                break;
+            }
+        }
+        
+        if (noteIndex == -1) {
+            return 60; // Default to middle C
+        }
+        
+        return (octave + 1) * 12 + noteIndex;
+    }
+    
+    /**
+     * Processes a note on event
+     * @param noteNumber The MIDI note number
+     * @param velocity The velocity of the note
+     */
+    private void processNoteOn(int noteNumber, int velocity) {
+        if (velocity > 0) {
+            String noteName = midiNumberToNoteName(noteNumber);
+            activeNotes.put(noteNumber, System.currentTimeMillis());
+            recordedNotes.add(noteName);
+            logger.info("Note On: {}", noteName);
+        } else {
+            processNoteOff(noteNumber);
+        }
+    }
+    
+    /**
+     * Processes a note off event
+     * @param noteNumber The MIDI note number
+     */
+    private void processNoteOff(int noteNumber) {
+        if (activeNotes.containsKey(noteNumber)) {
+            String noteName = midiNumberToNoteName(noteNumber);
+            activeNotes.remove(noteNumber);
+            logger.info("Note Off: {}", noteName);
+        }
+    }
+    
+    /**
+     * Tests PDF generation with a simple scale
+     * @param id The ID to use for the test
+     * @return The path to the generated PDF file
+     */
+    public String testPdfGeneration(String id) {
+        logger.info("Testing PDF generation with ID: {}...", id);
+        
+        // Create a simple C major scale
+        List<String> notes = List.of("C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5");
+        
+        String result = generatePDF(notes, id);
+        logger.info("PDF test generation completed");
+        return result;
+    }
+    
+    /**
+     * Gets the current recording ID
+     * @return The current recording ID
+     */
+    public String getCurrentRecordingId() {
+        return currentRecordingId;
+    }
+    
+    /**
+     * Gets the list of recorded notes
+     * @return The list of recorded notes
+     */
+    public List<String> getRecordedNotes() {
+        return new ArrayList<>(recordedNotes);
+    }
+    
+    /**
+     * Checks if recording is in progress
+     * @return True if recording is in progress
+     */
+    public boolean isRecording() {
+        return isRecording;
+    }
+    
+    /**
+     * Inner class to handle MIDI input
+     */
+    private class MidiInputReceiver implements Receiver {
+        @Override
+        public void send(MidiMessage message, long timeStamp) {
+            if (!isRecording) {
+                return;
+            }
+            
+            if (message instanceof ShortMessage) {
+                ShortMessage sm = (ShortMessage) message;
+                
+                if (sm.getCommand() == ShortMessage.NOTE_ON) {
+                    int noteNumber = sm.getData1();
+                    int velocity = sm.getData2();
+                    processNoteOn(noteNumber, velocity);
+                } else if (sm.getCommand() == ShortMessage.NOTE_OFF) {
+                    int noteNumber = sm.getData1();
+                    processNoteOff(noteNumber);
+                }
+            }
+            
+            // Store the event for later processing
+            recordedEvents.add(new MidiEvent(message, timeStamp));
+        }
+        
+        @Override
+        public void close() {
+            // Nothing to close
+        }
     }
 }
