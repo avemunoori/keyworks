@@ -20,17 +20,15 @@ public class FileStorageConfig {
     
     public FileStorageConfig(@Value("${app.output.directory:./output}") String outputDirectory) {
         this.outputDirectory = outputDirectory;
+        // Initialize the path immediately in the constructor
+        this.outputDirectoryPath = Paths.get(outputDirectory).toAbsolutePath().normalize();
+        logger.info("FileStorageConfig initialized with output directory: {}", this.outputDirectoryPath);
     }
-    
 
     public void init() {
         try {
-            // Convert to absolute path
-            this.outputDirectoryPath = Paths.get(outputDirectory).toAbsolutePath().normalize();
-            
             // Create directory if it doesn't exist
             Files.createDirectories(outputDirectoryPath);
-            logger.info("Initialized file storage with output directory: {}", outputDirectoryPath);
             logger.info("Output directory created/verified: {}", outputDirectoryPath);
         } catch (IOException e) {
             logger.error("Could not create output directory: {}", e.getMessage());
