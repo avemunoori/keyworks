@@ -508,4 +508,35 @@ public class MidiProcessingService {
             // Nothing to close
         }
     }
+
+   
+    public void simulateNote(String note) {
+        if (!isRecording) {
+            logger.warn("Cannot simulate note: Not recording");
+            return;
+        }
+        
+        try {
+            // Convert note name to MIDI note number
+            int noteNumber = noteNameToMidiNumber(note);
+            
+            // Simulate note on
+            logger.info("Simulated Note On: {}", note);
+            processNoteOn(noteNumber, 64);
+            
+            // Wait a short time
+            Thread.sleep(300);
+            
+            // Simulate note off
+            logger.info("Simulated Note Off: {}", note);
+            processNoteOff(noteNumber);
+        } catch (InterruptedException e) {
+            logger.error("Note simulation interrupted: {}", e.getMessage());
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            logger.error("Error simulating note {}: {}", note, e.getMessage());
+        }
+    }
+    
 }
+    
