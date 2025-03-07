@@ -7,8 +7,10 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
 import java.net.MalformedURLException;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 @Service
 public class FileService {
@@ -30,15 +32,22 @@ public class FileService {
             Path filePath = fileStorageConfig.resolveFilePath(relativePath);
             logger.debug("Resolving file: {} to absolute path: {}", relativePath, filePath);
             
-            Resource resource = new UrlResource(filePath.toUri());
-            
-            if (resource.exists() && resource.isReadable()) {
-                logger.debug("File exists and is readable: {}", filePath);
-                return resource;
-            } else {
-                logger.error("File not found or not readable: {}", filePath);
-                throw new RuntimeException("File not found or not readable: " + relativePath);
+            // Check if file exists
+            File file = filePath.toFile();
+            if (!file.exists()) {
+                logger.error("File does not exist: {}", filePath);
+                throw new RuntimeException("File not found: " + relativePath);
             }
+            
+            if (!file.canRead()) {
+                logger.error("File is not readable: {}", filePath);
+                throw new RuntimeException("File not readable: " + relativePath);
+            }
+            
+            Resource resource = new UrlResource(filePath.toUri());
+            logger.info("Successfully loaded resource: {}", filePath);
+            
+            return resource;
         } catch (MalformedURLException e) {
             logger.error("Error loading file: {}", relativePath, e);
             throw new RuntimeException("Error loading file: " + relativePath, e);
@@ -56,15 +65,22 @@ public class FileService {
             Path path = Path.of(absolutePath);
             logger.debug("Loading file from absolute path: {}", path);
             
-            Resource resource = new UrlResource(path.toUri());
-            
-            if (resource.exists() && resource.isReadable()) {
-                logger.debug("File exists and is readable: {}", path);
-                return resource;
-            } else {
-                logger.error("File not found or not readable: {}", path);
-                throw new RuntimeException("File not found or not readable: " + absolutePath);
+            // Check if file exists
+            File file = path.toFile();
+            if (!file.exists()) {
+                logger.error("File does not exist: {}", path);
+                throw new RuntimeException("File not found: " + absolutePath);
             }
+            
+            if (!file.canRead()) {
+                logger.error("File is not readable: {}", path);
+                throw new RuntimeException("File not readable: " + absolutePath);
+            }
+            
+            Resource resource = new UrlResource(path.toUri());
+            logger.info("Successfully loaded resource from absolute path: {}", path);
+            
+            return resource;
         } catch (MalformedURLException e) {
             logger.error("Error loading file: {}", absolutePath, e);
             throw new RuntimeException("Error loading file: " + absolutePath, e);

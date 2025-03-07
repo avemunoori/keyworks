@@ -3,56 +3,88 @@ package com.example.keyworks.config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-
-import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.util.StringUtils;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-@Component
+@Configuration
 public class FileStorageConfig {
-    
     private static final Logger logger = LoggerFactory.getLogger(FileStorageConfig.class);
     
-    @Value("${lilypond.output.dir:./output}")
-    private String outputDirectoryPath;
+    private final String outputDirectory;
+    private Path outputDirectoryPath;
     
-    private Path outputDirectory;
+    public FileStorageConfig(@Value("${app.output.directory:./output}") String outputDirectory) {
+        this.outputDirectory = outputDirectory;
+    }
     
-    @PostConstruct
+
     public void init() {
         try {
-            outputDirectory = Paths.get(outputDirectoryPath).toAbsolutePath().normalize();
-            logger.info("Initialized file storage with output directory: {}", outputDirectory);
+            // Convert to absolute path
+            this.outputDirectoryPath = Paths.get(outputDirectory).toAbsolutePath().normalize();
             
-            Files.createDirectories(outputDirectory);
-            logger.info("Output directory created/verified: {}", outputDirectory);
+            // Create directory if it doesn't exist
+            Files.createDirectories(outputDirectoryPath);
+            logger.info("Initialized file storage with output directory: {}", outputDirectoryPath);
+            logger.info("Output directory created/verified: {}", outputDirectoryPath);
         } catch (IOException e) {
-            logger.error("Could not create output directory: {}", outputDirectoryPath, e);
+            logger.error("Could not create output directory: {}", e.getMessage());
             throw new RuntimeException("Could not create output directory", e);
         }
     }
     
-    public Path getOutputDirectory() {
-        return outputDirectory;
+    public String getOutputDirectory() {
+        return outputDirectoryPath.toString();
     }
     
+    public Path getOutputDirectoryPath() {
+        return outputDirectoryPath;
+    }
+    
+    /**
+     * Resolves a relative file path against the output directory
+     * @param relativePath The relative path to resolve
+     * @return The absolute path
+     */
     public Path resolveFilePath(String relativePath) {
-        if (outputDirectory == null) {
-            throw new IllegalStateException("Output directory not initialized");
+        // Remove any leading slashes to ensure it's treated as relative
+        String cleanPath = StringUtils.cleanPath(relativePath);
+        if (cleanPath.startsWith("/")) {
+            cleanPath = cleanPath.substring(1);
         }
-        return outputDirectory.resolve(relativePath);
+        
+        Path resolvedPath = outputDirectoryPath.resolve(cleanPath).normalize();
+        
+        // Security check to prevent directory traversal attacks
+        if (!resolvedPath.startsWith(outputDirectoryPath)) {
+            throw new RuntimeException("Security violation: Attempted to access file outside of output directory: " + relativePath);
+        }
+        
+        logger.debug("Resolved path {} to {}", relativePath, resolvedPath);
+        return resolvedPath;
     }
     
-    public String getRelativePath(Path absolutePath) {
-        if (outputDirectory == null) {
-            throw new IllegalStateException("Output directory not initialized");
+    /**
+     * Converts an absolute path to a relative path (relative to the output directory)
+     * @param absolutePath The absolute path to convert
+     * @return The relative path
+     */
+    public String getRelativePath(String absolutePath) {
+        Path path = Paths.get(absolutePath).normalize();
+        
+        // Check if the path is within the output directory
+        if (path.startsWith(outputDirectoryPath)) {
+            return outputDirectoryPath.relativize(path).toString();
         }
-        if (absolutePath.startsWith(outputDirectory)) {
-            return outputDirectory.relativize(absolutePath).toString();
-        }
-        return absolutePath.getFileName().toString();
+        
+        // If not within the output directory, return the original path
+        // This is for backward compatibility
+        logger.warn("Path is not within output directory: {}", absolutePath);
+        return absolutePath;
     }
 }
