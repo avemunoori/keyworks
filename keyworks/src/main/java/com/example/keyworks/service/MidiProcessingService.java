@@ -3,7 +3,6 @@ package com.example.keyworks.service;
 import com.example.keyworks.model.Note;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -27,7 +26,7 @@ public class MidiProcessingService {
     private boolean isRecording = false;
     private long recordingStartTime;
 
-    @Autowired
+   
     public MidiProcessingService(MidiDeviceService midiDeviceService, 
                                 @Value("${app.output.directory:./output}") String outputDirectory) {
         this.midiDeviceService = midiDeviceService;

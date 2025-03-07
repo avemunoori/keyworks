@@ -1,5 +1,6 @@
 package com.example.keyworks.controller;
 
+import com.example.keyworks.config.FileStorageConfig;
 import com.example.keyworks.model.SheetMusic;
 import com.example.keyworks.service.SheetMusicService;
 import com.example.keyworks.service.FileService;
@@ -11,8 +12,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Optional;
 
 @RestController
@@ -22,19 +21,13 @@ public class FileController {
     private static final Logger logger = LoggerFactory.getLogger(FileController.class);
     private final SheetMusicService sheetMusicService;
     private final FileService fileService;
-    private final Path outputDir;
+    private final FileStorageConfig fileStorageConfig;
 
-    public FileController(SheetMusicService sheetMusicService, FileService fileService) {
+    public FileController(SheetMusicService sheetMusicService, FileService fileService, FileStorageConfig fileStorageConfig) {
         this.sheetMusicService = sheetMusicService;
         this.fileService = fileService;
-        
-        // Get the output directory from the same property used in LilyPondService
-        String outputDirPath = System.getProperty("lilypond.output.dir", "./output");
-        this.outputDir = Paths.get(outputDirPath);
-        
-        // Create output directory if it doesn't exist
-        this.outputDir.toFile().mkdirs();
-        logger.info("FileController initialized with output directory: {}", outputDir.toAbsolutePath());
+        this.fileStorageConfig = fileStorageConfig;
+        logger.info("FileController initialized with output directory: {}", fileStorageConfig.getOutputDirectory());
     }
 
     @GetMapping("/pdf/{id}")
@@ -55,6 +48,7 @@ public class FileController {
         }
         
         try {
+            // Use the relative path stored in the database
             Resource resource = fileService.loadFileAsResource(sheetMusic.getPdfPath());
             logger.info("PDF resource loaded successfully for sheet music ID: {}", id);
             
@@ -87,6 +81,7 @@ public class FileController {
         }
         
         try {
+            // Use the relative path stored in the database
             Resource resource = fileService.loadFileAsResource(sheetMusic.getPdfPath());
             logger.info("PDF resource loaded successfully for sheet music ID: {}", id);
             
@@ -119,6 +114,7 @@ public class FileController {
         }
         
         try {
+            // Use the relative path stored in the database
             Resource resource = fileService.loadFileAsResource(sheetMusic.getMidiPath());
             logger.info("MIDI resource loaded successfully for sheet music ID: {}", id);
             
@@ -138,12 +134,8 @@ public class FileController {
         logger.info("Request to serve file from output directory: {}", filename);
         
         try {
-            // Construct the path to the file in the output directory
-            Path filePath = outputDir.resolve(filename);
-            logger.debug("Resolved file path: {}", filePath.toAbsolutePath());
-            
-            // Convert Path to String for the loadFileAsResource method
-            Resource resource = fileService.loadFileAsResource(filePath.toString());
+            // Use the filename directly as the relative path
+            Resource resource = fileService.loadFileAsResource(filename);
             
             String contentType;
             if (filename.endsWith(".pdf")) {
